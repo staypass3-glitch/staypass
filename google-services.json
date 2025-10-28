@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "291106013613",
+    "project_id": "staypass-da9f3",
+    "storage_bucket": "staypass-da9f3.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:291106013613:android:f7278278c4928f35f52124",
+        "android_client_info": {
+          "package_name": "com.guru333.StayPass"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBJ1GFNH7BNllbm0LzAaztkWz8_3NZQPPo"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
