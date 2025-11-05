@@ -16,6 +16,7 @@ import CustomIndicator from './CustomIndicator.jsx';
 import EnterOtp from './EnterOtp.jsx';
 import ForgotPassword from './ForgotPassword.jsx';
 import GuardScanner from './GuardScanner.jsx';
+import ReachedHomeScreen from './ReachedHomeScreen.jsx';
 import SessionDetails from './SessionDetails.jsx';
 import ShowCredentials from './ShowCredentials.jsx';
 import SignInScreen from './SignInScreen.jsx';
@@ -84,6 +85,7 @@ export default function AppNavigator() {
             <>
               <Stack.Screen name="Student" component={StudentPortal} />
               <Stack.Screen name="studentTabsNavigator" component={StudentTabsNavigator} />
+              <Stack.Screen name="ReachedHomeScreen" component={ReachedHomeScreen} />
               <Stack.Screen name="ChangePassword" component={ChangePassword} />
               <Stack.Screen name="AllSettings" component={AllSettings} />
               <Stack.Screen name="AboutUs" component={AboutUs} />

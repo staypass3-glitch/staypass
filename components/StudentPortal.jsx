@@ -3,12 +3,9 @@ import * as Application from 'expo-application';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Notifications from 'expo-notifications';
-import '../firebase.js';
-
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Platform,
+  ActivityIndicator, BackHandler, Platform,
   StatusBar,
   StyleSheet,
   Text,
@@ -17,6 +14,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext.js';
 import { useUser } from '../context/UserContext.js';
+import '../firebase.js';
 import { supabase } from '../lib/supabase.js';
 import CustomAlert from './CustomAlert.jsx';
 import ScreenWrapper from './ScreenWrapper.jsx';
@@ -95,6 +93,20 @@ const StudentPortal = ({ navigation }) => {
       console.error('Error registering for push notifications:', error);
     }
   }, [user?.id]);
+
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      () => {
+     
+        BackHandler.exitApp();
+        return true; 
+      }
+    );
+
+    // Cleanup the event listener
+    return () => backHandler.remove();
+  }, []);
 
   // Register for push notifications on mount
   useEffect(() => {
@@ -209,7 +221,7 @@ const StudentPortal = ({ navigation }) => {
 
       // Verify session validation matches
       if (storedQrData.session_validation !== qrData.session_validation) {
-        throw new Error('QR code has been updated. Please scan the latest QR code.');
+        throw new Error('QR code has been sd. Please scan the latest QR code.');
       }
 
       // Check if session is active

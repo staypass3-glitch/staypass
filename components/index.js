@@ -11,7 +11,6 @@ export { default as CustomLoadingScreen } from './CustomLoadingScreen';
 // Existing Components
 export { default as PendingApproval } from './admin/PendingApproval';
 export { default as AdminDashboard } from './AdminDashboard';
-export { default as AppNavigator } from './AppNavigator';
 export { default as CustomAlert } from './CustomAlert';
 export { default as CustomInput } from './CustomInput';
 export { default as CustomTabBar } from './CustomTabBar';
@@ -27,5 +26,6 @@ export { default as StudentHistory } from './StudentHistory';
 export { default as StudentPortal } from './StudentPortal';
 export { default as TabBarButton } from './TabBarButton';
 export { default as Welcome } from './Welcome';
+
 import '../firebase.js';
 

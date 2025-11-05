@@ -1,3 +1,4 @@
+import saveImage from '@/components/saveImage.jsx';
 import * as Application from 'expo-application';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Platform } from 'react-native';
@@ -32,7 +33,7 @@ export const AuthProvider = ({ children }) => {
     
     const initializeApp = async () => {
       try {
-        console.log('🚀 App initialization started');
+        console.log(' App initialization started');
         
         // Reset states
         setIsLoadingAuth(true);
@@ -42,7 +43,7 @@ export const AuthProvider = ({ children }) => {
         // Set timeout for auth check
         authTimeoutRef.current = setTimeout(() => {
           if (mountedRef.current && !authCheckComplete) {
-            console.log('⏰ Auth timeout - proceeding with cached data fallback');
+            console.log(' Auth timeout - proceeding with cached data fallback');
             handleAuthTimeout();
           }
         }, AUTH_TIMEOUT);
@@ -51,26 +52,26 @@ export const AuthProvider = ({ children }) => {
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
         if (sessionError) {
-          console.error('❌ Session error:', sessionError);
+          console.error(' Session error:', sessionError);
           await handleNoAuthData();
         } else if (session?.user) {
-          console.log('✅ Valid session found, fetching fresh profile');
+          console.log(' Valid session found, fetching fresh profile');
           await fetchUserProfile(session.user);
           await completeInitialization();
         } else {
-          console.log('❌ No active session found');
+          console.log(' No active session found');
           await handleNoAuthData();
         }
 
       } catch (error) {
-        console.error('❌ Critical app initialization error:', error);
+        console.error(' Critical app initialization error:', error);
         await handleInitializationError();
       }
     };
 
     const handleAuthTimeout = async () => {
       if (!mountedRef.current) return;
-      console.log('⏰ Auth check timed out, using cached data');
+      console.log(' Auth check timed out, using cached data');
       setAuthCheckComplete(true);
       await loadCachedDataAsFallback();
       await completeInitialization();
@@ -78,7 +79,7 @@ export const AuthProvider = ({ children }) => {
 
     const handleNoAuthData = async () => {
       if (!mountedRef.current) return;
-      console.log('📦 No auth data, checking cache...');
+      console.log(' No auth data, checking cache...');
       setAuthCheckComplete(true);
       await loadCachedDataAsFallback();
       await completeInitialization();
@@ -86,7 +87,7 @@ export const AuthProvider = ({ children }) => {
 
     const handleInitializationError = async () => {
       if (!mountedRef.current) return;
-      console.log('❌ Initialization error, trying cache...');
+      console.log(' Initialization error, trying cache...');
       setAuthCheckComplete(true);
       await loadCachedDataAsFallback();
       await completeInitialization();
@@ -96,7 +97,7 @@ export const AuthProvider = ({ children }) => {
       if (!mountedRef.current) return;
 
       try {
-        console.log('📦 Loading cached data...');
+        console.log(' Loading cached data...');
         setIsLoadingCache(true);
         
         const isValid = await isCachedDataValid(CACHE_VALIDITY_DAYS);
@@ -118,18 +119,18 @@ export const AuthProvider = ({ children }) => {
             // Only use cached data if we don't have fresh auth data
             if (!user) {
               setUser(successfulUserData);
-              console.log('✅ Applied cached user data');
+              console.log(' Applied cached user data');
             }
           } else {
-            console.log('❌ No valid cached data available');
+            console.log(' No valid cached data available');
             await clearInvalidCache();
           }
         } else {
-          console.log('❌ Cached data expired, clearing');
+          console.log(' Cached data expired, clearing');
           await clearInvalidCache();
         }
       } catch (error) {
-        console.error('❌ Cache loading error:', error);
+        console.error(' Cache loading error:', error);
         await clearInvalidCache();
       } finally {
         if (mountedRef.current) {
@@ -144,14 +145,14 @@ export const AuthProvider = ({ children }) => {
         setCachedUser(null);
         setCachedRole(null);
       } catch (error) {
-        console.error('❌ Error clearing invalid cache:', error);
+        console.error(' Error clearing invalid cache:', error);
       }
     };
 
     const completeInitialization = () => {
       if (!mountedRef.current) return;
       
-      console.log('✅ App initialization complete');
+      console.log(' App initialization complete');
       
       // Clear timeout
       if (authTimeoutRef.current) {
@@ -175,7 +176,7 @@ export const AuthProvider = ({ children }) => {
       async (event, session) => {
         if (!mountedRef.current || !appInitialized) return;
         
-        console.log('🔄 Auth state changed:', event);
+        console.log(' Auth state changed:', event);
         
         try {
           setIsLoadingAuth(true);
@@ -183,11 +184,11 @@ export const AuthProvider = ({ children }) => {
           if (session?.user) {
             await fetchUserProfile(session.user);
           } else {
-            console.log('🚪 User signed out');
+            console.log(' User signed out');
             await handleSignOutCleanup();
           }
         } catch (error) {
-          console.error('❌ Auth state change error:', error);
+          console.error(' Auth state change error:', error);
           if (error.message?.includes('JWT') || error.message?.includes('auth') || error.status === 401) {
             await handleSignOutCleanup();
           }
@@ -219,7 +220,7 @@ export const AuthProvider = ({ children }) => {
 
   const fetchUserProfile = async (authUser) => {
     try {
-      console.log('📡 Fetching user profile for:', authUser.email);
+      console.log(' Fetching user profile for:', authUser.email);
       
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -257,7 +258,7 @@ export const AuthProvider = ({ children }) => {
         lastFetched: new Date().toISOString()
       };
 
-      console.log('✅ Fresh profile data received');
+      console.log(' Fresh profile data received');
       
       // Update state
       setUser(userData);
@@ -273,145 +274,186 @@ export const AuthProvider = ({ children }) => {
       return userData;
 
     } catch (error) {
-      console.error('❌ Profile fetch error:', error);
+      console.error(' Profile fetch error:', error);
       
       if (error.message?.includes('JWT') || error.message?.includes('auth') || error.status === 401) {
-        console.log('🔐 Auth error - clearing session');
+        console.log(' Auth error - clearing session');
         await handleSignOutCleanup();
       }
       throw error;
     }
   };
 
+
   const signIn = useCallback(async (email, password) => {
     setIsLoadingAuth(true);
     try {
-      // Authenticate
+   let existingDeviceId = null;
+      const { data: existingSessions, error: sessionError } = await supabase
+        .from('active_sessions')
+        .select('*')
+        .eq('email', email);
+  
+      if (sessionError) {
+        console.error('Error checking active sessions:', sessionError.message);
+      }
+  
+  if(existingSessions){
+      if(Platform.OS == 'android'){
+        existingDeviceId =  Application.getAndroidId();
+      }
+      else if(Platform.OS == 'ios'){
+        existingDeviceId = await Application.getIosIdForVendorAsync();
+      }
+    }
+
+
+      if (existingSessions && existingSessions.length > 0 && (existingSessions[0]?.device_id!=existingDeviceId)) {
+        Alert.alert(
+          'Already Logged In',
+          'Your account is already logged in on another device. Please log out there first.',
+          [{ text: 'OK' }]
+        );
+        setIsLoadingAuth(false);
+        return null;
+      }
+  
+
       const { data, error } = await supabase.auth.signInWithPassword({
         email,
-        password
+        password,
       });
-      
-      if (error){
-        Alert.alert('Error','Enter the valid credentials',[{text:'Ok'}])
+  
+      if (error) {
+        Alert.alert('Error', 'Enter valid credentials', [{ text: 'OK' }]);
+        setIsLoadingAuth(false);
+        return null;
       }
-      
-      // Fetch profile
-      console.log('🔐 Authentication successful, fetching user profile...');
+  
+    
+      if (data.session) {
+
+        let deviceId = null;
+
+        if (Platform.OS === 'android') {
+          deviceId =  Application.getAndroidId();
+        } else if (Platform.OS === 'ios') {
+          deviceId = await Application.getIosIdForVendorAsync();
+        }
+  
+        await supabase.from('active_sessions').insert({
+          user_id: data.user.id,
+          email,
+          session_id: data.session.id,
+          device_id: deviceId,
+          created_at: new Date(),
+        });
+      }
+
+      console.log(' Authentication successful, fetching user profile...');
       const userData = await fetchUserProfile(data.user);
-      
-      // Save to cache
-      console.log('💾 Saving user data to cache...');
+  
+
+      console.log(' Saving user data to cache...');
       await Promise.allSettled([
         saveUserRole(userData.role),
-        saveUserData(userData)
+        saveUserData(userData),
       ]);
-      
-      console.log('✅ Sign in complete');
+  
+      console.log(' Sign in complete');
       return userData;
-
+  
     } catch (error) {
-      console.error('❌ Sign in error:', error);
+      console.error(' Sign in error:', error);
+      Alert.alert('Error', 'Something went wrong. Please try again.', [{ text: 'OK' }]);
       throw error;
     } finally {
       setIsLoadingAuth(false);
     }
   }, []);
+  
 
-  const signUp = useCallback(async (email, password, userData, collegeId, sessionId) => {
+  const signUp = useCallback(async (formData) => {
     setIsLoadingAuth(true);
     try {
-      // Validate session
-      const { data: session, error: sessionError } = await supabase
-        .from('sessions')
-        .select('status, end_time')
-        .eq('id', sessionId)
-        .single();
-  
-      if (sessionError) throw sessionError;
-      if (session.status !== 'active' || new Date(session.end_time) < new Date()) {
-        throw new Error('This session has expired or is inactive');
+ 
+      let imageUrl = null;
+      if (formData.profileImage) {
+        imageUrl = await saveImage('profile', formData.profileImage);
       }
   
-      // Create auth user
-      const { data: authData, error: authError } = await supabase.auth.signUp({
-        email,
-        password,
+
+      const { data: { user }, error: authError } = await supabase.auth.signUp({
+        email: formData.email,
+        password: formData.password,
         options: {
           data: {
-            name: userData.name,
-            phone: userData.phone
-          }
-        }
+            name: formData.name,
+            phone: formData.phone,
+          },
+        },
       });
   
       if (authError) throw authError;
   
-      const guard_id = crypto.randomUUID();
-      const session_id = crypto.randomUUID();
-  
-      // Create profile
-      const { error: profileError } = await supabase.from('profiles').insert([{
-        id: authData.user.id,
-        role: userData.role,
-        college_id: collegeId,
-        current_session_id: sessionId,
-        name: userData.name,
-        phone_number: userData.phone,
-        room_number: userData.role === 'student' ? userData.roomNumber : null,
-        department: userData.role === 'admin' ? userData.department : null,
-        shift_schedule: userData.role === 'guard' ? userData.shift : null,
-        is_approved: userData.role === 'admin' ? false : true,
-        guard_id: userData.role === 'admin' ? guard_id : null,
-        session_id: userData.role === 'admin' ? session_id : null
-      }]);
-  
-      if (profileError) throw profileError;
-  
-      // Create user data object
-      const completeUserData = {
-        id: authData.user.id,
-        email: authData.user.email,
-        role: userData.role,
-        collegeId: collegeId,
-        sessionId: sessionId,
-        isApproved: userData.role === 'admin' ? false : true,
-        profile_image: null,
-        name: userData.name,
-        phone_number: userData.phone,
-        roomNumber: userData.role === 'student' ? userData.roomNumber : null,
-        parentNumber: userData.role === 'student' ? userData.parentPhone : null,
-        department: userData.role === 'admin' ? userData.department : null,
-        shift_schedule: userData.role === 'guard' ? userData.shift : null,
-        lastFetched: new Date().toISOString()
-      };
-  
-      // Update state
-      setUser(completeUserData);
-      setCachedUser(completeUserData);
-      setCachedRole(userData.role);
-      
-      // Save to storage
-      await Promise.allSettled([
-        saveUserRole(userData.role),
-        saveUserData(completeUserData)
+      const { error: profileError } = await supabase.from('profiles').insert([
+        {
+          id: user.id,
+          role: formData.role,
+          name: formData.name,
+          phone_number: formData.phone,
+          room_number: formData.role === 'student' ? formData.roomNumber : null,
+          department: (formData.role === 'admin' || formData.role === 'student') ? formData.department : null,
+          shift_schedule: formData.role === 'guard' ? formData.shift : null,
+          parent_phone: formData.role === 'student' ? formData.parentPhone : null,
+          is_approved: formData.role === 'admin' ? false : true,
+          profile_image: imageUrl || null,
+        },
       ]);
   
-      console.log('✅ Sign up successful');
-      return completeUserData;
-      
+      if (profileError) {
+        // If profile creation fails but auth succeeded, mark for cleanup
+        await handleFailedProfile(user.id, formData);
+        throw profileError;
+      }
+  
+      return { data: user, error: null };
     } catch (error) {
-      throw error;
+      return { data: null, error };
     } finally {
       setIsLoadingAuth(false);
     }
   }, []);
+  
+  const handleFailedProfile = async (userId, formData) => {
+ 
+    const failedProfile = {
+      userId,
+      formData,
+      timestamp: Date.now(),
+    };
+    localStorage.setItem('failed_profile', JSON.stringify(failedProfile));
+  };
+  
 
   const signOut = useCallback(async () => {
     setIsLoadingAuth(true);
-    
+  
     try {
       let deviceId = null;
+      let user = null;
+  
+      // Get current user
+      try {
+        const { data: userData, error: userError } = await supabase.auth.getUser();
+        if (userError) {
+          console.warn(' Could not retrieve user before sign-out:', userError.message);
+        } else {
+          user = userData?.user;
+        }
+      } catch (userFetchError) {
+        console.warn(' Error fetching current user:', userFetchError.message);
+      }
   
       // Get device ID
       try {
@@ -421,7 +463,7 @@ export const AuthProvider = ({ children }) => {
           deviceId = await Application.getIosIdForVendorAsync();
         }
       } catch (deviceIdError) {
-        console.warn('⚠️ Could not retrieve device ID:', deviceIdError.message);
+        console.warn(' Could not retrieve device ID:', deviceIdError.message);
       }
   
       // Delete push tokens
@@ -433,44 +475,66 @@ export const AuthProvider = ({ children }) => {
             .eq('device_id', deviceId);
   
           if (tokenError) {
-            console.warn('⚠️ Failed to delete push tokens:', tokenError.message);
+            console.warn(' Failed to delete push tokens:', tokenError.message);
           } else {
-            console.log('✅ Push tokens deleted successfully');
+            console.log(' Push tokens deleted successfully');
           }
         } catch (tokenDeletionError) {
-          console.warn('⚠️ Error during push token deletion:', tokenDeletionError.message);
+          console.warn(' Error during push token deletion:', tokenDeletionError.message);
+        }
+      }
+
+      //  Delete from active_sessions
+      if (user && deviceId) {
+        try {
+          const { error: sessionDeleteError } = await supabase
+            .from('active_sessions')
+            .delete()
+            .eq('user_id', user.id)
+            .eq('device_id', deviceId);
+  
+          if (sessionDeleteError) {
+            console.warn(' Failed to delete active session:', sessionDeleteError.message);
+          } else {
+            console.log(' Active session removed successfully');
+          }
+        } catch (activeSessionError) {
+          console.warn(' Error removing active session:', activeSessionError.message);
         }
       }
   
       // Sign out from auth
       try {
         const { error: signOutError } = await supabase.auth.signOut();
-        
-        if (signOutError && 
-            !signOutError.message.includes('Auth session missing') && 
-            !signOutError.message.includes('Invalid Refresh Token')) {
-          console.warn('⚠️ Auth sign out error:', signOutError.message);
+  
+        if (
+          signOutError &&
+          !signOutError.message.includes('Auth session missing') &&
+          !signOutError.message.includes('Invalid Refresh Token')
+        ) {
+          console.warn(' Auth sign out error:', signOutError.message);
         } else {
-          console.log('✅ Remote sign out successful');
+          console.log(' Remote sign out successful');
         }
       } catch (authError) {
-        console.warn('⚠️ Auth sign out error:', authError.message);
+        console.warn(' Auth sign out error:', authError.message);
       }
   
     } catch (error) {
-      console.error('❌ Unexpected sign out error:', error);
+      console.error(' Unexpected sign out error:', error);
     } finally {
       // Always perform cleanup
       try {
         await handleSignOutCleanup();
-        console.log('✅ Sign out cleanup completed');
+        console.log(' Sign out cleanup completed');
       } catch (cleanupError) {
-        console.error('❌ Error during cleanup:', cleanupError);
+        console.error(' Error during cleanup:', cleanupError);
       } finally {
         setIsLoadingAuth(false);
       }
     }
   }, [handleSignOutCleanup]);
+  
 
   const refreshSession = useCallback(async () => {
     setIsLoadingAuth(true);
@@ -494,7 +558,7 @@ export const AuthProvider = ({ children }) => {
         await fetchUserProfile(session.user);
       }
     } catch (error) {
-      console.error('❌ Error refreshing user data:', error);
+      console.error(' Error refreshing user data:', error);
     }
   }, [user?.id]);
 

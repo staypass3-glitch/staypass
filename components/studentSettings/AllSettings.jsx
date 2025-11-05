@@ -46,7 +46,7 @@ const AllSettings = () => {
   }, [isBlockingOperation]);
 
   const handleLogout = useCallback(async () => {
-    // Prevent multiple triggers
+   
     if (isBlockingOperation) return;
 
     showAlert(

@@ -17,6 +17,9 @@ const CustomAlert = ({
   buttons = [], 
   onDismiss 
 }) => {
+
+ const alertButtons = (buttons && buttons.length>0) ? buttons : [{text:'Ok'}]
+
   return (
     <Modal
       visible={visible}
@@ -33,7 +36,7 @@ const CustomAlert = ({
             <Text style={styles.message}>{message}</Text>
           )}
           <View style={styles.buttonContainer}>
-            {buttons.map((button, index) => (
+            {alertButtons.map((button, index) => (
               <TouchableOpacity
                 key={index}
                 style={[

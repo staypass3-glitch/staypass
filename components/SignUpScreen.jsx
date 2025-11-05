@@ -1,3 +1,4 @@
+import { useAuth } from '@/context/AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 import { useNavigation } from '@react-navigation/native';
@@ -23,6 +24,7 @@ const SignUpScreen = () => {
   const navigation = useNavigation();
   const scrollViewRef = useRef(null);
   const [role, setRole] = useState('student');
+  const [secureTextEntry,setSecureTextEntry] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -39,7 +41,7 @@ const SignUpScreen = () => {
   const [touched, setTouched] = useState({});
   const [loading,setLoading] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
-
+  const {signUp,signIn} = useAuth();
   // Handle keyboard events
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
@@ -296,13 +298,18 @@ const SignUpScreen = () => {
     );
   };
 
+  const togglePasswordVisibility = () =>{
+    setSecureTextEntry(!secureTextEntry);
+  }
+
   const handleSignUp = async () => {
     try {
       // Mark all fields as touched to show errors
       const allFields = ['name', 'email', 'password', 'phone', 'profileImage'];
-      if (role === 'student') allFields.push('roomNumber', 'parentPhone');
+      if (role === 'student') allFields.push('roomNumber', 'parentPhone', 'department');
       if (role === 'admin') allFields.push('department');
       if (role === 'guard') allFields.push('shift');
+
 
       const newTouched = {};
       allFields.forEach(field => {
@@ -318,8 +325,14 @@ const SignUpScreen = () => {
 
       setLoading(true);
 
-      const completeFormData = { ...formData, role: role };
-      navigation.navigate('EnterOtp', { formData: completeFormData });
+   
+      const completeFormData = { ...formData, role };
+      const { data, error } = await signUp(completeFormData);
+      if (error) throw error;
+      
+      const {data:signUpData,error:signUpError} = await signIn(completeFormData.email,completeFormData.password);
+      if(signUpError)  throw signUpError;
+      // navigation.navigate('EnterOtp', { formData: completeFormData });
     } catch (error) {
       Alert.alert('Registration Failed', error.message);
     } finally {
@@ -463,7 +476,7 @@ const SignUpScreen = () => {
                 value={formData.password}
                 onChangeText={(text) => handleFieldChange('password', text)}
                 onBlur={() => handleFieldBlur('password')}
-                secureTextEntry
+                secureTextEntry={secureTextEntry}
                 style={[
                   styles.input,
                   errors.password && touched.password && styles.errorInput
@@ -472,6 +485,13 @@ const SignUpScreen = () => {
                 returnKeyType="next"
                 blurOnSubmit={false}
               />
+               <TouchableOpacity onPress={togglePasswordVisibility} style={styles.eyeIcon}>
+                              <MaterialIcons 
+                                name={secureTextEntry ? "visibility" : "visibility-off"} 
+                                size={22} 
+                                color="#999" 
+                              />
+                            </TouchableOpacity>
             </View>
             {renderError('password')}
 
@@ -814,6 +834,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 14,
   },
+  eyeIcon:{
+    padding:10
+  }
 });
 
 export default SignUpScreen;

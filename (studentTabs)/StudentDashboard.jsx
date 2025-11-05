@@ -1,10 +1,10 @@
+import CustomIndicator from '@/components/CustomIndicator.jsx';
 import ScreenWrapper from '@/components/ScreenWrapper';
 import fonts from '@/constants/fonts';
 import theme from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Location from 'expo-location';
 import { useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -25,9 +25,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 // Constants - moved outside component
-const QR_SWITCH_DELAY = 15;
 const REJECTION_COOLDOWN = 3 * 60 * 60;
-const LOGOUT_DELAY = 2000;
 
 const COLORS = {
   primary: '#2563eb',
@@ -51,18 +49,10 @@ const formatTime = (seconds) => {
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 };
 
-const getStatusColor = (status) => {
-  const colors = {
-    approved: COLORS.success,
-    rejected: COLORS.danger,
-    pending: COLORS.warning
-  };
-  return colors[status] || COLORS.dark;
-};
-
 const StudentDashboard = () => {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const navigation = useNavigation();
+  const [customLoading, setCustomLoading] = useState(false);
   
   // Consolidated state
   const [state, setState] = useState({
@@ -82,17 +72,13 @@ const StudentDashboard = () => {
     requestStatus: null,
     timeRemaining: 0,
     generatingQR: false,
-    showMenu: false,
-    qrSwitchTimer: 0,
     qrType: null,
     scanOutCompleted: false,
-    requestHistory: [],
     profileData: null,
     refreshing: false,
     logoutLoading: false,
-    showReachedHomeModal: false,
     currentRequestId: null,
-    savingLocation: false
+    hasLocation: false,
   });
 
   const [customAlert, setCustomAlert] = useState({ 
@@ -103,9 +89,8 @@ const StudentDashboard = () => {
   });
 
   // Refs
-  const timerRef = useRef(null);
   const qrFadeAnim = useRef(new Animated.Value(0)).current;
-  const subscriptionRef = useRef(null);
+  const isMountedRef = useRef(true);
 
   // Memoized date values
   const { today, maxDate } = useMemo(() => {
@@ -117,29 +102,14 @@ const StudentDashboard = () => {
 
   // Optimized state updater
   const updateState = useCallback((updates) => {
-    setState(prev => ({ ...prev, ...updates }));
+    if (isMountedRef.current) {
+      setState(prev => ({ ...prev, ...updates }));
+    }
   }, []);
 
   // Alert handler
   const showAlert = useCallback((title, message, buttons = []) => {
     setCustomAlert({ visible: true, title, message, buttons });
-  }, []);
-
-  // Get current location - memoized
-  const getCurrentLocation = useCallback(async () => {
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== 'granted') {
-      throw new Error('Location permission not granted');
-    }
-
-    const location = await Location.getCurrentPositionAsync({
-      accuracy: Location.Accuracy.High,
-    });
-
-    return {
-      latitude: location.coords.latitude,
-      longitude: location.coords.longitude,
-    };
   }, []);
 
   // QR Code generation - optimized
@@ -165,36 +135,6 @@ const StudentDashboard = () => {
     }
   }, [user?.id, updateState, showAlert]);
 
-  // Save location - optimized
-  const saveLocationToDatabase = useCallback(async () => {
-    try {
-      updateState({ savingLocation: true });
-
-      const location = await getCurrentLocation();
-      const locationString = `${location.latitude},${location.longitude}`;
-
-      const { error } = await supabase
-        .from('requests')
-        .update({ location: locationString })
-        .eq('id', state.currentRequestId);
-
-      if (error) throw error;
-
-      updateState({ showReachedHomeModal: false, savingLocation: false });
-      
-      if (state.collegeId && state.sessionId) {
-        generateQRCode('return', state.collegeId, state.sessionId);
-      }
-
-      showAlert('Success', 'Location saved successfully! Return QR code is now ready.', [{ text: 'OK' }]);
-      fetchData();
-    } catch (error) {
-      console.error('Error saving location:', error);
-      showAlert('Error', error.message || 'Failed to save location. Please try again.', [{ text: 'OK' }]);
-      updateState({ savingLocation: false });
-    }
-  }, [state.currentRequestId, state.collegeId, state.sessionId, getCurrentLocation, showAlert, generateQRCode]);
-
   // Data fetching - optimized with early returns
   const fetchData = useCallback(async () => {
     if (!user?.id) return;
@@ -203,17 +143,12 @@ const StudentDashboard = () => {
       updateState({ loading1: true, error: null });
       
       // Parallel fetch for better performance
-      const [profileResult, historyResult] = await Promise.all([
+      const [profileResult] = await Promise.all([
         supabase
           .from('profiles')
           .select('*, colleges(name)')
           .eq('id', user.id)
           .single(),
-        supabase
-          .from('requests')
-          .select('*')
-          .eq('student_id', user.id)
-          .order('created_at', { ascending: false })
       ]);
 
       if (profileResult.error) throw profileResult.error;
@@ -241,7 +176,7 @@ const StudentDashboard = () => {
         .from('requests')
         .select('id, status, decided_at, actual_scan_out, actual_scan_in, location')
         .eq('student_id', user.id)
-        .eq('college_id', user.collegeId)
+        .eq('college_id', collegeId)
         .order('created_at', { ascending: false })
         .limit(1)
         .maybeSingle();
@@ -255,7 +190,6 @@ const StudentDashboard = () => {
         adminId,
         lastRejectedAt: profileData.last_rejected_at,
         profileData,
-        requestHistory: historyResult.data || [],
         loading1: false
       };
 
@@ -263,6 +197,7 @@ const StudentDashboard = () => {
         updates.currentRequestId = requestData.id;
         updates.requestStatus = requestData.status;
         updates.scanOutCompleted = !!requestData.actual_scan_out;
+        updates.hasLocation = !!requestData.location;
 
         if (requestData.status === 'rejected') {
           updates.lastRejectedAt = requestData.decided_at;
@@ -270,13 +205,18 @@ const StudentDashboard = () => {
 
         // Handle QR generation
         if (requestData.status === 'approved') {
+          setCustomLoading(true);
           if (!requestData.actual_scan_out && collegeId && sessionId) {
+            // Generate exit QR
             setTimeout(() => generateQRCode('exit', collegeId, sessionId), 100);
           } else if (requestData.actual_scan_out && !requestData.location) {
-            updates.showReachedHomeModal = true;
+            // Navigate to ReachedHomeScreen
+            navigation.navigate('ReachedHomeScreen', { requestId: requestData.id });
           } else if (requestData.location && !requestData.actual_scan_in && collegeId && sessionId) {
+            // Generate return QR immediately if location already exists
             setTimeout(() => generateQRCode('return', collegeId, sessionId), 100);
           }
+          setCustomLoading(false);
         }
       }
 
@@ -287,7 +227,7 @@ const StudentDashboard = () => {
       updateState({ error, loading1: false });
       showAlert('Error', error.message || 'Failed to fetch data', [{ text: 'OK' }]);
     }
-  }, [user?.id, generateQRCode, updateState, showAlert]);
+  }, [user?.id, generateQRCode, updateState, showAlert, navigation]);
 
   // Request submission - optimized validation
   const submitRequest = useCallback(async () => {
@@ -350,134 +290,29 @@ const StudentDashboard = () => {
     }
   }, [state.description, state.dateToGo, state.dateToCome, state.collegeId, state.sessionId, state.adminId, state.lastRejectedAt, user?.id, fetchData, showAlert, updateState]);
 
-  // Session management - optimized
-  const onLeave = useCallback(async () => {
-    showAlert(
-      'Leave Session',
-      'Are you sure you want to leave this session?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Leave',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              updateState({ loading: true });
-
-              const { error } = await supabase
-                .from('profiles')
-                .update({
-                  college_id: null,
-                  current_session_id: null,
-                  last_joined_at: null
-                })
-                .eq('id', user.id);
-
-              if (error) throw error;
-
-              showAlert('Success', 'Left session successfully!', [{ text: 'OK' }]);
-              navigation.replace('Student');
-            } catch (error) {
-              console.error('Error leaving session:', error);
-              showAlert('Error', error.message || 'Failed to leave session', [{ text: 'OK' }]);
-            } finally {
-              updateState({ loading: false });
-            }
-          },
-        },
-      ]
-    );
-  }, [user?.id, navigation, showAlert, updateState]);
-
-  const onLogout = useCallback(async () => {
-    showAlert(
-      'Logout',
-      'Are you sure you want to logout?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Logout',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              updateState({ logoutLoading: true });
-              
-              setTimeout(async () => {
-                try {
-                  await signOut();
-                } catch (error) {
-                  console.error('Error during logout:', error);
-                  updateState({ logoutLoading: false });
-                  showAlert('Error', error.message || 'Failed to logout', [{ text: 'OK' }]);
-                }
-              }, LOGOUT_DELAY);
-            } catch (error) {
-              updateState({ logoutLoading: false });
-              showAlert('Error', error.message || 'Failed to initiate logout', [{ text: 'OK' }]);
-            }
-          },
-        },
-      ]
-    );
-  }, [signOut, showAlert, updateState]);
-
   // Initial fetch effect
   useEffect(() => {
     if (user?.id) {
       fetchData();
     }
-  }, [user?.id]);
+  }, [user?.id, fetchData]);
 
-  // Realtime subscription effect - optimized cleanup
+  // Focus listener to refresh data when returning to screen
   useEffect(() => {
-    if (!user?.id || !state.collegeId || !state.sessionId) return;
+    const unsubscribe = navigation.addListener('focus', () => {
+      // Refresh data when screen comes into focus
+      fetchData();
+    });
 
-    subscriptionRef.current = supabase
-      .channel(`requests-${user.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'requests',
-          filter: `student_id=eq.${user.id}`,
-        },
-        (payload) => {
-          const { new: newData, old: oldData } = payload;
+    return unsubscribe;
+  }, [navigation, fetchData]);
 
-          if (newData.status === 'approved' && oldData?.status !== 'approved') {
-            if (state.collegeId && state.sessionId) {
-              if (!newData.actual_scan_out) {
-                generateQRCode('exit', state.collegeId, state.sessionId);
-              } else if (newData.location && !newData.actual_scan_in) {
-                generateQRCode('return', state.collegeId, state.sessionId);
-              }
-            }
-          }
-          
-          if (newData.actual_scan_out && !oldData?.actual_scan_out && !newData.location) {
-            updateState({
-              scanOutCompleted: true,
-              qrData: null,
-              qrType: null,
-              currentRequestId: newData.id,
-              showReachedHomeModal: true
-            });
-          }
-          fetchData();
-        }
-      )
-      .subscribe();
-
+  // Cleanup on unmount
+  useEffect(() => {
     return () => {
-      if (subscriptionRef.current) {
-        subscriptionRef.current.unsubscribe();
-      }
-      if (timerRef.current) {
-        clearInterval(timerRef.current);
-      }
+      isMountedRef.current = false;
     };
-  }, [user?.id, state.collegeId, state.sessionId]);
+  }, []);
 
   // Rejection cooldown timer effect
   useEffect(() => {
@@ -508,7 +343,7 @@ const StudentDashboard = () => {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [state.lastRejectedAt]);
+  }, [state.lastRejectedAt, updateState]);
 
   // QR fade animation effect
   useEffect(() => {
@@ -594,6 +429,12 @@ const StudentDashboard = () => {
                     : 'Show this QR code to the guard when returning.'}
                 </Text>
               </View>
+              <View style={styles.refreshNoteContainer}>
+                <Ionicons name="refresh-circle" size={20} color={COLORS.warning} style={{ marginRight: 6 }} />
+                <Text style={styles.refreshNote}>
+                  After the guard scans this QR code, please refresh this page to continue.
+                </Text>
+              </View>
             </Animated.View>
           )}
           
@@ -603,7 +444,11 @@ const StudentDashboard = () => {
         </View>
       );
     }
-
+    
+    if (customLoading) {
+      return <CustomIndicator/>
+    }
+    
     if (state.requestStatus === 'rejected' && state.timeRemaining > 0) {
       return (
         <View style={styles.statusContainer}>
@@ -674,7 +519,7 @@ const StudentDashboard = () => {
             disabled={state.loading || state.timeRemaining > 0}
           >
             {state.loading ? (
-              <ActivityIndicator color="white" />
+              <ActivityIndicator color={'white'}/>
             ) : (
               <Text style={styles.buttonText}>Submit Request</Text>
             )}
@@ -684,17 +529,11 @@ const StudentDashboard = () => {
     }
 
     return null;
-  }, [state.requestStatus, state.timeRemaining, state.qrData, state.qrType, state.generatingQR, state.description, state.dateToGo, state.dateToCome, state.loading, qrFadeAnim, submitRequest, updateState]);
+  }, [state.requestStatus, state.timeRemaining, state.qrData, state.qrType, state.generatingQR, state.description, state.dateToGo, state.dateToCome, state.loading, qrFadeAnim, submitRequest, updateState, customLoading]);
 
   // Loading state
   if (!state.collegeId || state.loading1) {
-    return (
-      <LinearGradient colors={[COLORS.light, COLORS.white]} style={styles.container}>
-        <View style={styles.centerContainer}>
-          <ActivityIndicator size="large" color={COLORS.primary} />
-        </View>
-      </LinearGradient>
-    );
+    return <CustomIndicator/>
   }
 
   // Error state
@@ -739,7 +578,7 @@ const StudentDashboard = () => {
 
   // Main render
   return (
-    <ScreenWrapper>
+    <ScreenWrapper haveTabs={true}>
       <View style={styles.container}>
         <View style={styles.header}>
           <View>
@@ -767,52 +606,6 @@ const StudentDashboard = () => {
         </ScrollView>
       </View>
       
-      {/* Reached Home Modal */}
-      <Modal
-        transparent={true}
-        animationType="fade"
-        visible={state.showReachedHomeModal}
-        onRequestClose={() => {}}
-      >
-        <View style={styles.overlay}>
-          <View style={styles.reachedHomeModal}>
-            <Ionicons name="home" size={60} color={COLORS.success} style={{ marginBottom: 20 }} />
-            <Text style={styles.reachedHomeTitle}>Press the button when you reach home.</Text>
-            <Text style={styles.reachedHomeMessage}>
-              Press the button below to confirm and save your location. This will make your return QR code ready.
-            </Text>
-            
-            <TouchableOpacity
-              style={[styles.button, { 
-                backgroundColor: COLORS.success, 
-                marginTop: 20,
-                width: '100%'
-              }]}
-              onPress={() => {
-                showAlert(
-                  'Confirm Location',
-                  'Have you really reached home? We will capture your current location.',
-                  [
-                    { text: 'No', style: 'cancel' },
-                    { text: 'Yes, I have', onPress: saveLocationToDatabase },
-                  ]
-                );
-              }}
-              disabled={state.savingLocation}
-            >
-              {state.savingLocation ? (
-                <ActivityIndicator color="white" />
-              ) : (
-                <>
-                  <Ionicons name="location" size={20} color="white" style={{ marginRight: 8 }} />
-                  <Text style={styles.buttonText}>Yes, I Reached Home</Text>
-                </>
-              )}
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-      
       <CustomAlert
         visible={customAlert.visible}
         title={customAlert.title}
@@ -832,6 +625,7 @@ const StudentDashboard = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    marginBottom:20,
   },
   centerContainer: {
     flex: 1,
@@ -869,7 +663,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 6,
     elevation: 3,
-    marginBottom: 20,
   },
   label: {
     fontSize: fonts.fontSizes.sm,
@@ -988,6 +781,25 @@ const styles = StyleSheet.create({
     fontWeight: fonts.fontWeights.medium,
     maxWidth: '85%',
   },
+  refreshNoteContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF7ED',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 16,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    maxWidth: '95%',
+  },
+  refreshNote: {
+    color: COLORS.warning,
+    textAlign: 'center',
+    fontSize: fonts.fontSizes.sm,
+    fontWeight: fonts.fontWeights.medium,
+    flex: 1,
+    flexWrap: 'wrap',
+  },
   errorText: {
     fontSize: fonts.fontSizes.md,
     textAlign: 'center',
@@ -1017,32 +829,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#2563eb',
-  },
-  reachedHomeModal: {
-    backgroundColor: 'white',
-    borderRadius: 20,
-    padding: 30,
-    alignItems: 'center',
-    width: '85%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  reachedHomeTitle: {
-    fontSize: fonts.fontSizes.xl,
-    fontWeight: fonts.fontWeights.bold,
-    color: theme.colors.darkText,
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  reachedHomeMessage: {
-    fontSize: fonts.fontSizes.md,
-    color: theme.colors.gray,
-    textAlign: 'center',
-    lineHeight: 22,
   },
 });
 

@@ -1,3 +1,4 @@
+import { MaterialIcons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -5,6 +6,7 @@ import {
   ActivityIndicator,
   Alert,
   Image,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -16,6 +18,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
+import CustomAlert from './CustomAlert';
 import CustomIndicator from './CustomIndicator';
 import CustomLoadingScreen from './CustomLoadingScreen.jsx';
 import ScreenWrapper from './ScreenWrapper';
@@ -23,8 +26,82 @@ import ScreenWrapper from './ScreenWrapper';
 // Constants
 const LOGOUT_DELAY = 2000;
 const CAMERA_HEIGHT = 400;
+const MemoizedMaterialIcons  = React.memo(MaterialIcons);
+// Translations
+const translations = {
+  en: {
+    title: 'Guard Portal',
+    joinSession: 'Join Admin Session',
+    enterSessionId: 'Enter Session ID',
+    joinButton: 'Join Session',
+    logout: 'Log Out',
+    scanQRCode: 'Scan Student QR Code',
+    leaveSession: 'Leave Session',
+    studentCard: 'Student ID Card',
+    name: 'Name',
+    room: 'Room',
+    department: 'Department',
+    action: 'Action',
+    goingHome: 'Going Home',
+    returning: 'Returning',
+    scanAgain: 'Scan Again',
+    grantPermission: 'Grant Permission',
+    permissionText: 'We need your permission to use the camera to scan QR codes.',
+    loggingOut: 'Logging out...',
+    loadingDetails: 'Loading guard details...',
+    settings: 'Settings',
+    language: 'Language',
+    english: 'English',
+    marathi: 'मराठी',
+    howToUse: 'How to Use',
+    noImage: 'No Image',
+    closeSettings: 'Close Settings',
+    instructions: [
+      '1. Enter the Session ID provided by your admin',
+      '2. Click "Join Session" to start your duty',
+      '3. Scan student QR codes when they want to exit or return',
+      '4. The system will automatically record their exit/entry time',
+      '5. After scanning, you can scan the next student',
+    ],
+  },
+  mr: {
+    title: 'गार्ड पोर्टल',
+    joinSession: 'प्रशासक सत्रात सामील व्हा',
+    enterSessionId: 'सत्र आयडी प्रविष्ट करा',
+    joinButton: 'सत्रात सामील व्हा',
+    logout: 'लॉग आउट',
+    scanQRCode: 'विद्यार्थी QR कोड स्कॅन करा',
+    leaveSession: 'सत्र सोडा',
+    studentCard: 'विद्यार्थी ओळखपत्र',
+    name: 'नाव',
+    room: 'खोली',
+    department: 'विभाग',
+    action: 'कृती',
+    goingHome: 'घरी जात आहे',
+    returning: 'परत येत आहे',
+    scanAgain: 'पुन्हा स्कॅन करा',
+    grantPermission: 'परवानगी द्या',
+    permissionText: 'QR कोड स्कॅन करण्यासाठी आम्हाला कॅमेरा वापरण्याची परवानगी आवश्यक आहे.',
+    loggingOut: 'लॉग आउट करत आहे...',
+    loadingDetails: 'गार्ड तपशील लोड करत आहे...',
+    settings: 'सेटिंग्ज',
+    language: 'भाषा',
+    english: 'English',
+    marathi: 'मराठी',
+    howToUse: 'कसे वापरावे',
+    noImage: 'चित्र नाही',
+    closeSettings: 'सेटिंग्ज बंद करा',
+    instructions: [
+      '१. तुमच्या प्रशासकाने दिलेला सत्र आयडी प्रविष्ट करा',
+      '२. तुमची ड्युटी सुरू करण्यासाठी "सत्रात सामील व्हा" वर क्लिक करा',
+      '३. विद्यार्थी बाहेर जाऊ इच्छित असताना किंवा परत येताना त्यांचे QR कोड स्कॅन करा',
+      '४. सिस्टम आपोआप त्यांचा बाहेर पडण्याची/प्रवेशाची वेळ रेकॉर्ड करेल',
+      '५. स्कॅन केल्यानंतर, तुम्ही पुढील विद्यार्थ्याला स्कॅन करू शकता',
+    ],
+  },
+};
 
-const GuardPortal = () => {
+const GuardScanner = () => {
   const { user, signOut } = useAuth();
   const [scanned, setScanned] = useState(false);
   const [studentDetails, setStudentDetails] = useState(null);
@@ -34,18 +111,25 @@ const GuardPortal = () => {
   const [isSessionJoined, setIsSessionJoined] = useState(false);
   const [guardDetailsLoaded, setGuardDetailsLoaded] = useState(false);
   const [studentImage, setStudentImage] = useState(null);
-  
+  const [language, setLanguage] = useState('en');
+  const [settingsVisible, setSettingsVisible] = useState(false);
+  const [customAlert,setCustomAlert] = useState({visible:false,title:'',message:'',buttons:[]})
   // Individual loading states
   const [joinLoading, setJoinLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
-  const [customIndicator,setCustomIndicator] = useState(false);
+  const [customIndicator, setCustomIndicator] = useState(false);
 
   // Refs to prevent multiple simultaneous scans
   const scanningRef = useRef(false);
   const logoutTimerRef = useRef(null);
 
+  const t = translations[language];
+
+  const showAlert = useCallback((title,message,buttons=[])=>{
+    setCustomAlert({visible:true,title:title,message:message,buttons:buttons});
+  });
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -55,11 +139,32 @@ const GuardPortal = () => {
     };
   }, []);
 
+  // Load language preference
+  useEffect(() => {
+    const loadLanguage = async () => {
+      if (!user?.id) return;
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('language_preference')
+          .eq('id', user.id)
+          .single();
+        
+        if (data?.language_preference) {
+          setLanguage(data.language_preference);
+        }
+      } catch (error) {
+        console.error('Error loading language:', error);
+      }
+    };
+    loadLanguage();
+  }, [user?.id]);
+
   const fetchGuardDetails = useCallback(async () => {
     if (!user?.id) return;
 
     try {
-      setCustomIndicator(true)
+      setCustomIndicator(true);
       setGuardDetailsLoaded(false);
       
       const { data: guardProfile, error } = await supabase
@@ -85,6 +190,23 @@ const GuardPortal = () => {
     fetchGuardDetails();
   }, [fetchGuardDetails]);
 
+  const changeLanguage = async (newLanguage) => {
+    try {
+      setLanguage(newLanguage);
+      
+      // Save to database
+      const { error } = await supabase
+        .from('profiles')
+        .update({ language_preference: newLanguage })
+        .eq('id', user.id);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error('Error saving language:', error);
+      Alert.alert('Error', 'Failed to save language preference');
+    }
+  };
+
   const joinSession = useCallback(async () => {
     const trimmedSessionId = sessionId.trim();
     
@@ -96,7 +218,6 @@ const GuardPortal = () => {
     try {
       setJoinLoading(true);
 
-      // Fetch session by guard_id
       const { data: sessionData, error: sessionError } = await supabase
         .from('sessions')
         .select('id, college_id')
@@ -109,7 +230,6 @@ const GuardPortal = () => {
         throw new Error('Invalid session ID or session not found');
       }
 
-      // Update guard profile
       const { error: updateError } = await supabase
         .from('profiles')
         .update({ 
@@ -122,8 +242,8 @@ const GuardPortal = () => {
 
       setIsSessionJoined(true);
       await fetchGuardDetails();
-      Alert.alert('Success', 'Session joined successfully!');
-      setSessionId(''); // Clear input
+      showAlert('Success', 'Session joined successfully!',[{text:'Ok'}]);
+      setSessionId('');
     } catch (error) {
       console.error("Error joining session:", error);
       Alert.alert('Error', error.message || 'Failed to join session');
@@ -133,7 +253,6 @@ const GuardPortal = () => {
   }, [sessionId, user?.id, fetchGuardDetails]);
 
   const handleBarCodeScanned = useCallback(async ({ data }) => {
-    // Prevent multiple simultaneous scans
     if (scanningRef.current || !guardDetailsLoaded || !guardCollegeId) {
       if (!guardDetailsLoaded || !guardCollegeId) {
         Alert.alert('Error', 'Guard details not fully loaded. Please wait.');
@@ -153,7 +272,6 @@ const GuardPortal = () => {
         throw new Error('Invalid QR code format');
       }
 
-      // Fetch student details
       const { data: student, error: studentError } = await supabase
         .from('profiles')
         .select('name, room_number, department, college_id, parent_phone, profile_image')
@@ -162,7 +280,6 @@ const GuardPortal = () => {
 
       if (studentError) throw studentError;
 
-      // Validate college match
       if (student.college_id !== guardCollegeId) {
         Alert.alert('Error', 'You can only approve requests for students from your college.');
         setScanned(false);
@@ -171,12 +288,10 @@ const GuardPortal = () => {
         return;
       }
 
-      // Set student image if available
       if (student.profile_image) {
         setStudentImage(student.profile_image);
       }
 
-      // Handle exit or return
       if (type === 'exit') {
         const { error: exitError } = await supabase
           .from('requests')
@@ -243,7 +358,8 @@ const GuardPortal = () => {
 
       await fetchGuardDetails();
       setIsSessionJoined(false);
-      Alert.alert('Success', 'Left session successfully');
+      setSettingsVisible(false);
+      showAlert('Success', 'Left session successfully');
     } catch (error) {
       console.error(error);
       Alert.alert('Error', 'Failed to leave session');
@@ -255,6 +371,7 @@ const GuardPortal = () => {
   const onLogout = useCallback(async () => {
     try {
       setLogoutLoading(true);
+      setSettingsVisible(false);
       
       logoutTimerRef.current = setTimeout(async () => {
         try {
@@ -279,26 +396,144 @@ const GuardPortal = () => {
     scanningRef.current = false;
   }, []);
 
+  // Settings Modal Component
+ // Settings Modal Component
+ const SettingsModal = () => (
+  <Modal
+    visible={settingsVisible}
+    animationType="slide"
+    transparent={true}
+    onRequestClose={() => setSettingsVisible(false)}
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.modalContent}>
+        {/* Header with Close Button */}
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>{t.settings}</Text>
+          <Pressable
+            style={styles.modalCloseButton}
+            onPress={() => setSettingsVisible(false)}
+          >
+            <MemoizedMaterialIcons name="close" size={28} color="#334155" />
+          </Pressable>
+        </View>
+        
+        {/* Scrollable Content */}
+        <ScrollView 
+          style={styles.modalScrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.modalScrollContent}
+        >
+          {/* Language Selection */}
+          <View style={styles.settingSection}>
+            <Text style={styles.settingLabel}>{t.language}</Text>
+            <View style={styles.languageButtons}>
+              <Pressable
+                style={[
+                  styles.languageButton,
+                  language === 'en' && styles.languageButtonActive
+                ]}
+                onPress={() => changeLanguage('en')}
+              >
+                <Text style={[
+                  styles.languageButtonText,
+                  language === 'en' && styles.languageButtonTextActive
+                ]}>
+                  {t.english}
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[
+                  styles.languageButton,
+                  language === 'mr' && styles.languageButtonActive
+                ]}
+                onPress={() => changeLanguage('mr')}
+              >
+                <Text style={[
+                  styles.languageButtonText,
+                  language === 'mr' && styles.languageButtonTextActive
+                ]}>
+                  {t.marathi}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
 
-  // Memoized components
+          {/* How to Use */}
+          <View style={styles.settingSection}>
+            <Text style={styles.settingLabel}>{t.howToUse}</Text>
+            <View style={styles.instructionsContainer}>
+              {t.instructions.map((instruction, index) => (
+                <Text key={index} style={styles.instructionText}>
+                  {instruction}
+                </Text>
+              ))}
+            </View>
+          </View>
+
+          {/* Action Buttons */}
+          {isSessionJoined && (
+            <Pressable
+              style={[styles.secondaryButton, leaveLoading && styles.disabledButton]}
+              onPress={()=>[
+                showAlert('Session','Do You really want to leave the session',[
+                  {text:'Yes',style:'destructive',onPress:leaveSession},
+                  {text:'Cancel',style:'cancel'}
+                ])
+              ]}
+              disabled={leaveLoading}
+            >
+              {leaveLoading ? (
+                <ActivityIndicator color="#3b82f6" />
+              ) : (
+                <Text style={styles.secondaryButtonText}>{t.leaveSession}</Text>
+              )}
+            </Pressable>
+          )}
+
+          <Pressable
+            style={[styles.dangerButton, logoutLoading && styles.disabledButton]}
+            onPress={()=>{
+              showAlert('Logout',
+                 'Do you really want to Logout?',
+                  [{text:'Yes',onPress:onLogout},
+                    {text:'Cancel',style:'cancel'}
+                  ]
+        
+              )
+            }}
+            disabled={logoutLoading}
+          >
+            {logoutLoading ? (
+              <ActivityIndicator color="#ffffff" />
+            ) : (
+              <Text style={styles.buttonText}>{t.logout}</Text>
+            )}
+          </Pressable>
+        </ScrollView>
+      </View>
+    </View>
+  </Modal>
+);
+
   const PermissionView = useMemo(() => (
     <SafeAreaView style={styles.container}>
       <LinearGradient colors={['#3b82f6', '#2563eb']} style={styles.headerGradient}>
-        <Text style={styles.title}>Guard Portal</Text>
+        <Text style={styles.title}>{t.title}</Text>
       </LinearGradient>
       <View style={styles.contentContainer}>
         <Text style={styles.permissionText}>
-          We need your permission to use the camera to scan QR codes.
+          {t.permissionText}
         </Text>
         <Pressable 
           style={styles.primaryButton}
           onPress={requestPermission}
         >
-          <Text style={styles.buttonText}>Grant Permission</Text>
+          <Text style={styles.buttonText}>{t.grantPermission}</Text>
         </Pressable>
       </View>
     </SafeAreaView>
-  ), [requestPermission]);
+  ), [requestPermission, language]);
 
   const StudentCard = useMemo(() => {
     if (!studentDetails) return null;
@@ -306,7 +541,7 @@ const GuardPortal = () => {
     return (
       <View style={styles.studentCardContainer}>
         <View style={styles.studentCard}>
-          <Text style={styles.cardTitle}>Student ID Card</Text>
+          <Text style={styles.cardTitle}>{t.studentCard}</Text>
           
           {studentImage ? (
             <Image 
@@ -316,30 +551,30 @@ const GuardPortal = () => {
             />
           ) : (
             <View style={styles.placeholderImage}>
-              <Text style={styles.placeholderText}>No Image</Text>
+              <Text style={styles.placeholderText}>{t.noImage}</Text>
             </View>
           )}
           
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Name:</Text>
+            <Text style={styles.detailLabel}>{t.name}:</Text>
             <Text style={styles.detailValue}>{studentDetails.name}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Room:</Text>
+            <Text style={styles.detailLabel}>{t.room}:</Text>
             <Text style={styles.detailValue}>{studentDetails.room_number}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Department:</Text>
+            <Text style={styles.detailLabel}>{t.department}:</Text>
             <Text style={styles.detailValue}>{studentDetails.department || 'Computer Technology'}</Text>
           </View>
           <View style={styles.detailRow}>
-            <Text style={styles.detailLabel}>Action:</Text>
+            <Text style={styles.detailLabel}>{t.action}:</Text>
             <Text style={[
               styles.detailValue, 
               styles.statusBadge,
               studentDetails.type === 'exit' ? styles.exitBadge : styles.returnBadge
             ]}>
-              {studentDetails.type === 'exit' ? 'Going Home' : 'Returning'}
+              {studentDetails.type === 'exit' ? t.goingHome : t.returning}
             </Text>
           </View>
         </View>
@@ -348,13 +583,12 @@ const GuardPortal = () => {
           style={styles.primaryButton}
           onPress={handleScanAgain}
         >
-          <Text style={styles.buttonText}>Scan Again</Text>
+          <Text style={styles.buttonText}>{t.scanAgain}</Text>
         </Pressable>
       </View>
     );
-  }, [studentDetails, studentImage, handleScanAgain]);
+  }, [studentDetails, studentImage, handleScanAgain, language]);
 
-  // Early returns
   if (!permission) {
     return <View />; 
   }
@@ -367,22 +601,35 @@ const GuardPortal = () => {
     return (
       <CustomLoadingScreen 
         type="logout"
-        message="Logging out..."
+        message={t.loggingOut}
         duration={LOGOUT_DELAY}
         onFinish={() => setLogoutLoading(false)}
       />
     );
   }
 
-  if(customIndicator){
-    return <CustomIndicator/>
+  if (customIndicator) {
+    return <CustomIndicator />;
   }
+
   return (
     <ScreenWrapper>
       <SafeAreaView style={styles.container}>
         <StatusBar barStyle="light-content" />
         <LinearGradient colors={['#3b82f6', '#2563eb']} style={styles.headerGradient}>
-          <Text style={styles.title}>Guard Portal</Text>
+          <View style={styles.headerContent}>
+            <Text style={styles.title}>{t.title}</Text>
+            <Pressable
+              style={styles.settingsButton}
+              onPress={() => setSettingsVisible(true)}
+            >
+              <MemoizedMaterialIcons 
+                                name="settings" 
+                                size={24} 
+                                color={'#fff'} 
+                              />
+            </Pressable>
+          </View>
         </LinearGradient>
 
         <ScrollView 
@@ -393,10 +640,10 @@ const GuardPortal = () => {
           {!isSessionJoined ? (
             <View style={styles.contentContainer}>
               <View style={styles.card}>
-                <Text style={styles.cardTitle}>Join Admin Session</Text>
+                <Text style={styles.cardTitle}>{t.joinSession}</Text>
                 <TextInput
                   style={styles.input}
-                  placeholder="Enter Session ID"
+                  placeholder={t.enterSessionId}
                   value={sessionId}
                   onChangeText={setSessionId}
                   placeholderTextColor="#a0aec0"
@@ -412,18 +659,7 @@ const GuardPortal = () => {
                   {joinLoading ? (
                     <ActivityIndicator color="#ffffff" />
                   ) : (
-                    <Text style={styles.buttonText}>Join Session</Text>
-                  )}
-                </Pressable>
-                <Pressable
-                  style={[styles.dangerButton, logoutLoading && styles.disabledButton]}
-                  onPress={onLogout}
-                  disabled={logoutLoading}
-                >
-                  {logoutLoading ? (
-                    <ActivityIndicator color="#ffffff" />
-                  ) : (
-                    <Text style={styles.buttonText}>Log Out</Text>
+                    <Text style={styles.buttonText}>{t.joinButton}</Text>
                   )}
                 </Pressable>
               </View>
@@ -433,7 +669,7 @@ const GuardPortal = () => {
               {!guardDetailsLoaded ? (
                 <View style={styles.loadingContainer}>
                   <ActivityIndicator size="large" color="#3b82f6" />
-                  <Text style={styles.loadingText}>Loading guard details...</Text>
+                  <Text style={styles.loadingText}>{t.loadingDetails}</Text>
                 </View>
               ) : scanned && studentDetails ? (
                 StudentCard
@@ -456,44 +692,31 @@ const GuardPortal = () => {
                       )}
                     </View>
                     <View style={styles.cameraOverlay}>
-                      <Text style={styles.overlayText}>Scan Student QR Code</Text>
+                      <Text style={styles.overlayText}>{t.scanQRCode}</Text>
                     </View>
                   </CameraView>
                 </View>
               )}
-
-              <View style={styles.buttonGroup}>
-                <Pressable 
-                  style={[styles.secondaryButton, leaveLoading && styles.disabledButton]}
-                  onPress={leaveSession}
-                  disabled={leaveLoading}
-                >
-                  {leaveLoading ? (
-                    <ActivityIndicator color="#3b82f6" />
-                  ) : (
-                    <Text style={styles.secondaryButtonText}>Leave Session</Text>
-                  )}
-                </Pressable>
-                
-                <Pressable 
-                  style={[styles.dangerButton, logoutLoading && styles.disabledButton]}
-                  onPress={onLogout}
-                  disabled={logoutLoading}
-                >
-                  {logoutLoading ? (
-                    <ActivityIndicator color="#ffffff" />
-                  ) : (
-                    <Text style={styles.buttonText}>Log Out</Text>
-                  )}
-                </Pressable>
-              </View>
             </View>
           )}
         </ScrollView>
+
+        <SettingsModal />
+        <CustomAlert 
+        visible={customAlert.visible}
+        title={customAlert.title}
+        message={customAlert.message}
+        buttons={customAlert.buttons}
+        onDismiss={()=>{
+          setCustomAlert({visible:false,title:'',message:'',buttons:[]});
+        }}
+        />
       </SafeAreaView>
     </ScreenWrapper>
   );
 };
+
+export default GuardScanner;
 
 const styles = StyleSheet.create({
   container: {
@@ -516,11 +739,25 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 5,
   },
+  headerContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
   title: {
     fontSize: 28,
     fontWeight: 'bold',
     color: '#ffffff',
     textAlign: 'center',
+  },
+  settingsButton: {
+    position: 'absolute',
+    right: 0,
+    padding: 8,
+  },
+  settingsIcon: {
+    fontSize: 24,
   },
   contentContainer: {
     flex: 1,
@@ -583,6 +820,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     minHeight: 50,
     justifyContent: 'center',
+    marginBottom: 10,
   },
   disabledButton: {
     opacity: 0.6,
@@ -717,9 +955,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#dcfce7',
     color: '#10b981',
   },
-  buttonGroup: {
-    marginTop: 10,
-  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -731,6 +966,84 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#334155',
   },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#ffffff',
+    borderTopLeftRadius: 25,
+    borderTopRightRadius: 25,
+    padding: 25,
+    maxHeight: '85%',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#334155',
+    marginBottom: 20,
+    textAlign: 'center',
+  },
+  settingSection: {
+    marginBottom: 25,
+  },
+  settingLabel: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#334155',
+    marginBottom: 12,
+  },
+  languageButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  languageButton: {
+    flex: 1,
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    padding: 15,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  languageButtonActive: {
+    backgroundColor: '#dbeafe',
+    borderColor: '#3b82f6',
+  },
+  languageButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#64748b',
+  },
+  languageButtonTextActive: {
+    color: '#3b82f6',
+  },
+  instructionsContainer: {
+    backgroundColor: '#f8fafc',
+    borderRadius: 10,
+    padding: 15,
+  },
+  instructionText: {
+    fontSize: 15,
+    color: '#334155',
+    marginBottom: 10,
+    lineHeight: 22,
+  },
+  closeButton: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    padding: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  closeButtonText: {
+    color: '#334155',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalCloseButton:{
+    marginBottom:10
+  }
 });
-
-export default GuardPortal;
