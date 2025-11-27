@@ -1,9 +1,10 @@
 import saveImage from '@/components/saveImage.jsx';
 import * as Application from 'expo-application';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import { clearUserData, getUserData, getUserRole, isCachedDataValid, saveUserData, saveUserRole } from '../helpers/storage.js';
 import { supabase } from '../lib/supabase.js';
+import { useAlert } from './AlertContext.js';
 
 const AuthContext = createContext();
 
@@ -15,6 +16,7 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [cachedUser, setCachedUser] = useState(null);
   const [cachedRole, setCachedRole] = useState(null);
+  const {showAlert} = useAlert();
 
   // Loading states
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
@@ -309,7 +311,7 @@ export const AuthProvider = ({ children }) => {
 
 
       if (existingSessions && existingSessions.length > 0 && (existingSessions[0]?.device_id!=existingDeviceId)) {
-        Alert.alert(
+        showAlert(
           'Already Logged In',
           'Your account is already logged in on another device. Please log out there first.',
           [{ text: 'OK' }]
@@ -325,7 +327,7 @@ export const AuthProvider = ({ children }) => {
       });
   
       if (error) {
-        Alert.alert('Error', 'Enter valid credentials', [{ text: 'OK' }]);
+        showAlert('Error', 'Enter valid credentials', [{ text: 'OK' }]);
         setIsLoadingAuth(false);
         return null;
       }
@@ -365,7 +367,7 @@ export const AuthProvider = ({ children }) => {
   
     } catch (error) {
       console.error(' Sign in error:', error);
-      Alert.alert('Error', 'Something went wrong. Please try again.', [{ text: 'OK' }]);
+      showAlert('Error', 'Something went wrong. Please try again.', [{ text: 'OK' }]);
       throw error;
     } finally {
       setIsLoadingAuth(false);

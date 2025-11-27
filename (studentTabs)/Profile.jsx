@@ -1,5 +1,5 @@
-import { CustomAlert } from '@/components';
 import CustomInput from '@/components/CustomInput';
+import { ImagePickerAlert } from '@/components/ImagePickerAlert';
 import saveImage from '@/components/saveImage';
 import ScreenWrapper from '@/components/ScreenWrapper';
 import { useEditFields } from '@/constants/editableFields';
@@ -51,9 +51,11 @@ const Profile = () => {
   // Use ref for values that don't need to trigger re-renders
   const imageNameRef = useRef('');
 
+
   const showAlert = useCallback((title, message, buttons = []) => {
     setCustomAlert({ visible: true, title, message, buttons });
   }, []);
+
 
   // Settings button handler
   const handleSettingsPress = useCallback(() => {
@@ -614,17 +616,21 @@ const Profile = () => {
               </TouchableOpacity>
             </View>
           </View>
-        </ScrollView>
-      </KeyboardAvoidingView>
-      <CustomAlert
+          <ImagePickerAlert
         visible={customAlert.visible}
         title={customAlert.title}
         message={customAlert.message}
         buttons={customAlert.buttons}
-        onDismiss={() => {
-          setCustomAlert({ visible: false, title: '', message: '', buttons: [] });
-        }}
+        onDismiss={() => setCustomAlert({ 
+          visible: false, 
+          title: '', 
+          message: '', 
+          buttons: [] 
+        })}
       />
+        </ScrollView>
+      </KeyboardAvoidingView>
+
     </ScreenWrapper>
   );
 };

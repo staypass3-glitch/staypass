@@ -351,7 +351,7 @@ const ChangePassword = () => {
                     style={styles.textInput}
                     placeholder="Enter current password"
                     placeholderTextColor={theme.colors.gray}
-                    secureTextEntry={!showCurrentPassword}
+                    secureTextEntry={showCurrentPassword}
                     onChangeText={(text) => currentPassRef.current = text}
                     onFocus={() => handleFocus('currentPassword')}
                     onBlur={handleBlur}
@@ -390,7 +390,7 @@ const ChangePassword = () => {
                     style={styles.textInput}
                     placeholder="Enter new password"
                     placeholderTextColor={theme.colors.gray}
-                    secureTextEntry={!showNewPassword}
+                    secureTextEntry={showNewPassword}
                     onChangeText={(text) => newPassRef.current = text}
                     onFocus={() => handleFocus('newPassword')}
                     onBlur={handleBlur}
@@ -429,7 +429,7 @@ const ChangePassword = () => {
                     style={styles.textInput}
                     placeholder="Confirm new password"
                     placeholderTextColor={theme.colors.gray}
-                    secureTextEntry={!showConfirmPassword}
+                    secureTextEntry={showConfirmPassword}
                     value={confirmPass}
                     onChangeText={setConfirmPass}
                     onFocus={() => handleFocus('confirmPassword')}

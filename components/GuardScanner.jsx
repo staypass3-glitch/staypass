@@ -120,7 +120,7 @@ const GuardScanner = () => {
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [customIndicator, setCustomIndicator] = useState(false);
-
+  const [loggingOut,setLoggingOut] = useState(false);
   // Refs to prevent multiple simultaneous scans
   const scanningRef = useRef(false);
   const logoutTimerRef = useRef(null);
@@ -368,26 +368,17 @@ const GuardScanner = () => {
     }
   }, [user?.id, fetchGuardDetails]);
 
-  const onLogout = useCallback(async () => {
-    try {
-      setLogoutLoading(true);
-      setSettingsVisible(false);
-      
-      logoutTimerRef.current = setTimeout(async () => {
-        try {
-          await signOut();
-        } catch (error) {
-          console.error('Logout failed:', error);
-          setLogoutLoading(false);
-          Alert.alert('Error', 'Failed to logout. Please try again.');
-        }
-      }, LOGOUT_DELAY);
-    } catch (error) {
-      console.error('Logout failed:', error);
-      setLogoutLoading(false);
-      Alert.alert('Error', 'Failed to logout. Please try again.');
+  const onLogout = async() => {
+    try{
+    setLoggingOut(true);
+    await signOut();
+    setLoggingOut(false);
+    }catch(error){
+      showAlert('Error','Error occoured while logging out');
+    }finally{
+      setLoggingOut(false);
     }
-  }, [signOut]);
+  };
 
   const handleScanAgain = useCallback(() => {
     setScanned(false);
@@ -395,6 +386,8 @@ const GuardScanner = () => {
     setStudentImage(null);
     scanningRef.current = false;
   }, []);
+
+
 
   // Settings Modal Component
  // Settings Modal Component
@@ -610,6 +603,19 @@ const GuardScanner = () => {
 
   if (customIndicator) {
     return <CustomIndicator />;
+  }
+
+  if (loggingOut) {
+    return (
+      <ScreenWrapper>
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <View style={{ flexDirection: 'column', alignItems: 'center', gap: 15 }}>
+          <Text style={{ fontSize: 19 }}>Logging Out</Text>
+          <ActivityIndicator size={50} color="#3b82f6" />
+        </View>
+      </View>
+      </ScreenWrapper>
+    );
   }
 
   return (

@@ -23,9 +23,9 @@ const ReachedHomeScreen = () => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
-        // Exit the app when back button is pressed
+    
         BackHandler.exitApp();
-        return true; // Prevent default behavior
+        return true; 
       }
     );
 

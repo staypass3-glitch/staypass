@@ -16,6 +16,7 @@ export { default as CustomInput } from './CustomInput';
 export { default as CustomTabBar } from './CustomTabBar';
 export { default as EnterOtp } from './EnterOtp';
 export { default as GuardScanner } from './GuardScanner';
+export { default as ImagePickerAlert } from './ImagePickerAlert';
 export { default as saveImage } from './saveImage';
 export { default as ScreenWrapper } from './ScreenWrapper';
 export { default as SessionDetails } from './SessionDetails';

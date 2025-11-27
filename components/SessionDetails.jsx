@@ -1,27 +1,32 @@
+import { COLORS } from '@/constants/studentConstants.js';
+import { useAlert } from '@/context/AlertContext.js';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from "@react-native-community/datetimepicker";
 import { useNavigation, useRoute } from '@react-navigation/native';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Clipboard,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
-  Platform,
-  StyleSheet,
-  Text,
+  Modal,
+  Platform, StyleSheet, Text,
   TextInput,
   TouchableOpacity,
   View
 } from 'react-native';
 import { useAuth } from '../context/AuthContext.js';
 import { supabase } from '../lib/supabase.js';
+import CustomIndicator from './CustomIndicator.jsx';
 import ScreenWrapper from './ScreenWrapper.jsx';
 
 const { width } = Dimensions.get('window');
 
 const SessionDetails = () => {
+  const {showAlert} = useAlert();
   const { user } = useAuth();
   const navigation = useNavigation();
   const route = useRoute();
@@ -35,6 +40,17 @@ const SessionDetails = () => {
   const [loadingStudents, setLoadingStudents] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredStudents, setFilteredStudents] = useState([]);
+  const [deleteModalVisible, setDeleteModalVisible] = useState(false);
+  const [sessionInfoExpanded, setSessionInfoExpanded] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [codeInput, setCodeInput] = useState('');
+  const [customIndicator,setCustomIndicator] = useState(false);
+  const [calendar,showCalendar] = useState(false);
+  const [dateFind,setDateFind] = useState(new Date());
+  const [dateInserted,setDateInserted] = useState(false);
+  const [fetchedRequests, setFetchedRequests] = useState([]);
+  const [showDownloadModal, setShowDownloadModal] = useState(false);
 
   useEffect(() => {
     if (session) {
@@ -43,7 +59,64 @@ const SessionDetails = () => {
     }
   }, [session]);
 
-  // Optimized filter function that doesn't cause unnecessary re-renders
+  const generateVerificationCode = () => {
+    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+    setGeneratedCode(code);
+    return code;
+  };
+
+  const openDeleteModal = () => {
+    const newCode = generateVerificationCode();
+    setVerificationCode(newCode);
+    setCodeInput('');
+    setDeleteModalVisible(true);
+  };
+
+  const {today,minDate} = useMemo(()=>{
+      const today = new Date();
+      const minDate = new Date(sessionData.start_time);
+
+      return {today,minDate};
+  },[])
+
+  const closeDeleteModal = () => {
+    setDeleteModalVisible(false);
+    setCodeInput('');
+  };
+
+  const handleDeleteSession = () => {
+    if (codeInput.trim().toUpperCase() === generatedCode) {
+      closeDeleteModal();
+      deleteSession();
+    } else {
+      Alert.alert('Invalid Code', 'Please enter the correct verification code.');
+    }
+  };
+
+  const deleteSession = async() => {
+ try{   
+    console.log('deleting');
+    setCustomIndicator(true);
+   
+    const {error:collegeError} = await supabase
+    .from('colleges')
+    .delete()
+    .eq('id',session.college_id)
+
+    if (collegeError)  console.error(collegeError);
+
+
+      navigation.navigate('Admin');
+      Alert.alert('Session','Session deleted Successfully')
+ }catch(error){
+        console.log('Error occoured');
+ }
+finally{
+  setCustomIndicator(false);
+}
+
+  };
+
   const filterStudents = useCallback((query, studentList) => {
     if (query.trim() === '') {
       return studentList;
@@ -56,17 +129,177 @@ const SessionDetails = () => {
     }
   }, []);
 
-  // Only update filteredStudents when searchQuery or students actually change
   useEffect(() => {
     const filtered = filterStudents(searchQuery, students);
     setFilteredStudents(filtered);
   }, [searchQuery, students, filterStudents]);
 
+  // Fetch requests for selected date
+  const fetchRequestsForDate = async (selectedDate) => {
+    try {
+      setDateInserted(true);
+      
+      // Format date to YYYY-MM-DD
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      
+      console.log(formattedDate);
+      
+      // Query using RPC or filter with proper date comparison
+      const { data, error } = await supabase
+        .from('requests')
+        .select(`
+          *,
+          student:profiles!requests_student_id_fkey(
+            id,
+            name,
+            phone_number,
+            room_number,
+            department
+          )
+        `)
+        .eq('college_id', session.college_id)
+        .or(`actual_scan_out.gte.${formattedDate}T00:00:00,actual_scan_in.gte.${formattedDate}T00:00:00`)
+        .or(`actual_scan_out.lte.${formattedDate}T23:59:59,actual_scan_in.lte.${formattedDate}T23:59:59`)
+        .order('created_at', { ascending: false });
+  
+      if (error) throw error;
+  
+      setDateInserted(false);
+  
+      if (data && data.length > 0) {
+        setFetchedRequests(data);
+        setShowDownloadModal(true);
+        showAlert(
+          'Data Found',
+          `Found ${data.length} request(s) for ${selectedDate.toLocaleDateString()}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        showAlert(
+          'No Data',
+          `No requests found for ${selectedDate.toLocaleDateString()}`,
+          [{ text: 'OK' }]
+      );
+      }
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      setDateInserted(false);
+      showAlert('Error', 'Failed to fetch data for the selected date');
+    }
+  };
+
+  // Generate CSV content
+  const generateCSV = (requests) => {
+    const headers = [
+      'Student Name',
+      'Phone Number',
+      'Room Number',
+      'Department',
+      'Type',
+      'Status',
+      'Date to Go',
+      'Date to Come',
+      'Description',
+      'Location',
+      'Created At',
+      'Actual Scan Out',
+      'Actual Scan In'
+    ];
+
+    const rows = requests.map(req => [
+      req.student?.name || 'N/A',
+      req.student?.phone_number || 'N/A',
+      req.student?.room_number || 'N/A',
+      req.student?.department || 'N/A',
+      req.type || 'N/A',
+      req.status || 'N/A',
+      req.date_to_go || 'N/A',
+      req.date_to_come || 'N/A',
+      req.description || 'N/A',
+      req.location || 'N/A',
+      req.created_at ? new Date(req.created_at).toLocaleString() : 'N/A',
+      req.actual_scan_out ? new Date(req.actual_scan_out).toLocaleString() : 'N/A',
+      req.actual_scan_in ? new Date(req.actual_scan_in).toLocaleString() : 'N/A'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
+    ].join('\n');
+
+    return csvContent;
+  };
+
+  // Download Excel (CSV) file
+  const downloadExcel = async () => {
+    try {
+      setCustomIndicator(true);
+
+      const csvContent = generateCSV(fetchedRequests);
+      const fileName = `requests_${dateFind.toISOString().split('T')[0]}.csv`;
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+
+      // Write CSV file
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      // Share the file
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: 'Download Requests Data',
+          UTI: 'public.comma-separated-values-text'
+        });
+      } else {
+        Alert.alert('Success', `File saved at: ${fileUri}`);
+      }
+
+      setShowDownloadModal(false);
+      setCustomIndicator(false);
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      setCustomIndicator(false);
+      Alert.alert('Error', 'Failed to download Excel file');
+    }
+  };
+
+  const datePicker = useMemo(()=>(
+    <>
+    { calendar && (
+      <DateTimePicker 
+      value={today}
+      mode="date"
+      display="default"
+      onChange={(event,selectedDate)=>{
+
+      if(event.type == "dismissed"){
+        showCalendar(false);
+        return;
+      }
+
+      if(selectedDate){
+        setDateFind(selectedDate)
+        showCalendar(false);
+        // Fetch data for selected date
+        fetchRequestsForDate(selectedDate);
+      }
+      else{
+        console.error('Error Occoured in selecting the date');
+      }
+      }}
+      minimumDate={minDate}
+      maximumDate={today}
+      />
+    )}
+
+    </>
+  ))
+
   const showSessionQR = async (session) => {
     try {
       setLoading(true);
 
-      // Check if QR code exists
       const { data: existingQrCode, error: qrError } = await supabase
         .from('qrcodes')
         .select('*')
@@ -85,7 +318,6 @@ const SessionDetails = () => {
         college_id: session.college_id
       });
 
-      // If no QR code exists or it has expired, generate a new one
       if (!existingQrCode || now > expiresAt) {
         const { error: upsertError } = await supabase
           .from('qrcodes')
@@ -94,7 +326,7 @@ const SessionDetails = () => {
               session_id: session.id,
               college_id: session.college_id,
               code: qrData,
-              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000) // 24h expiry
+              expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000)
             },
             { onConflict: 'session_id' }
           );
@@ -154,30 +386,6 @@ const SessionDetails = () => {
     }
   };
 
-  const deactivateSession = async (sessionId) => {
-    try {
-      setLoading(true);
-
-      const { error } = await supabase
-        .from('sessions')
-        .update({ 
-          status: 'expired',
-          end_time: new Date() 
-        })
-        .eq('id', sessionId);
-
-      if (error) throw error;
-
-      setSessionData({ ...sessionData, status: 'expired' });
-      Alert.alert('Success', 'Session deactivated successfully');
-    } catch (error) {
-      console.error("Error deactivating session:", error);
-      Alert.alert('Error', error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const handleStudentPress = (student) => {
     navigation.navigate('StudentHistory', { 
       student: student,
@@ -185,45 +393,48 @@ const SessionDetails = () => {
     });
   };
 
-  const renderStudentItem = ({ item }) => (
+  const renderStudentItem = ({ item, index }) => (
     <TouchableOpacity 
-      style={styles.studentCard}
+      style={[
+        styles.studentCard,
+        index === 0 && styles.firstStudentCard,
+        index === filteredStudents.length - 1 && styles.lastStudentCard
+      ]}
       onPress={() => handleStudentPress(item)}
       activeOpacity={0.7}
     >
-      <View style={styles.studentHeader}>
-        <View style={styles.studentInfo}>
-          <Text style={styles.studentName}>{item.name || 'Unknown Student'}</Text>
-          <Text style={styles.studentEmail}>{item.email}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={20} color="#666" />
+      <View style={styles.studentAvatar}>
+        <Text style={styles.avatarText}>
+          {item.name ? item.name.charAt(0).toUpperCase() : '?'}
+        </Text>
       </View>
       
-      <View style={styles.studentDetails}>
-        <View style={styles.studentDetailRow}>
-          <Ionicons name="call-outline" size={14} color="#666" />
-          <Text style={styles.studentDetail}>{item.phone_number || 'No phone'}</Text>
-        </View>
-        
-        <View style={styles.studentDetailRow}>
-          <Ionicons name="home-outline" size={14} color="#666" />
-          <Text style={styles.studentDetail}>Room {item.room_number || 'N/A'}</Text>
-        </View>
-        
-        <View style={styles.studentDetailRow}>
-          <Ionicons name="time-outline" size={14} color="#666" />
-          <Text style={styles.studentDetail}>
-            Joined: {item.last_joined_at ? new Date(item.last_joined_at).toLocaleString() : 'Unknown'}
+      <View style={styles.studentContent}>
+        <View style={styles.studentHeader}>
+          <Text style={styles.studentName} numberOfLines={1}>
+            {item.name || 'Unknown Student'}
           </Text>
+          <Ionicons name="chevron-forward" size={16} color="#cbd5e1" />
+        </View>
+        
+        <View style={styles.studentDetails}>
+          <View style={styles.detailItem}>
+            <Ionicons name="call-outline" size={12} color="#64748b" />
+            <Text style={styles.detailText} numberOfLines={1}>
+              {item.phone_number || 'No phone number'}
+            </Text>
+          </View>
+          
+          <View style={styles.detailItem}>
+            <Ionicons name="home-outline" size={12} color="#64748b" />
+            <Text style={styles.detailText}>
+              Room {item.room_number || 'N/A'}
+            </Text>
+          </View>
         </View>
       </View>
     </TouchableOpacity>
   );
-
-  const copySessionId = (id) => {
-    Clipboard.setString(id);
-    Alert.alert('Copied!', 'Session ID copied to clipboard');
-  };
 
   const clearSearch = () => {
     setSearchQuery('');
@@ -232,9 +443,13 @@ const SessionDetails = () => {
   if (!sessionData) {
     return (
       <View style={styles.centeredContainer}>
-        <ActivityIndicator size="large" color="#4361ee" />
+        <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
+  }
+
+  if(customIndicator){
+    return <CustomIndicator/>
   }
 
   return (
@@ -244,120 +459,184 @@ const SessionDetails = () => {
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
       >
-        {/* Fixed Header Section */}
-        <View style={styles.headerContainer}>
-          {/* Header with back button and title */}
+        {/* Enhanced Header Section */}
+        <View style={styles.headerSection}>
           <View style={styles.header}>
             <TouchableOpacity 
               onPress={() => navigation.goBack()} 
               style={styles.backButton}
             >
-              <Ionicons name="arrow-back" size={24} color="#4361ee" />
+              <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
             </TouchableOpacity>
-            <Text style={styles.title}>Session Details</Text>
-            <View style={styles.headerSpacer} />
-          </View>
-          
-          {/* Session Info Section */}
-          <View style={styles.sessionInfoCard}>
-            <Text style={styles.sectionTitle}>Session Information</Text>
             
-            <View style={styles.infoRow}>
-              <Ionicons name="calendar-outline" size={16} color="#666" />
-              <Text style={styles.infoLabel}>Start Date:</Text>
-              <Text style={styles.infoValue}>
-                {new Date(sessionData.start_time).toLocaleDateString()}
-              </Text>
-            </View>
-           
-            <View style={styles.infoRow}>
-              <Ionicons name="time-outline" size={16} color="#666" />
-              <Text style={styles.infoLabel}>Start Time:</Text>
-              <Text style={styles.infoValue}>
-                {new Date(sessionData.start_time).toLocaleTimeString()}
+            <View style={styles.headerTitleContainer}>
+              <Text style={styles.title}>Session Details</Text>
+              <Text style={styles.subtitle}>
+                {students.length} {students.length === 1 ? 'student' : 'students'} enrolled
               </Text>
             </View>
             
-            {sessionData.end_time && (
-              <View style={styles.infoRow}>
-                <Ionicons name="time-outline" size={16} color="#666" />
-                <Text style={styles.infoLabel}>End Time:</Text>
-                <Text style={styles.infoValue}>
-                  {new Date(sessionData.end_time).toLocaleTimeString()}
-                </Text>
-              </View>
-            )}
-            
-            <View style={styles.infoRow}>
-              <Ionicons name="school-outline" size={16} color="#666" />
-              <Text style={styles.infoLabel}>College:</Text>
-              <Text style={styles.infoValue}>
-                {sessionData?.colleges?.name || 'Unknown college'}
-              </Text>
-            </View>
-            
-            {/* Enhanced Session Credentials Button */}
             <TouchableOpacity 
-              style={styles.credentialsButton}
-              onPress={() => {
-                navigation.navigate('ShowCredentials', { sessionId: session?.id })
-              }}
+              onPress={() => setSessionInfoExpanded(!sessionInfoExpanded)}
+              style={styles.infoToggle}
             >
-              <View style={styles.credentialsButtonContent}>
-                <Ionicons name="key-outline" size={20} color="#fff" />
-                <Text style={styles.credentialsButtonText}>
-                  Session Credentials
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={20} color="#fff" />
+              <Ionicons 
+                name={sessionInfoExpanded ? "chevron-up" : "information-circle-outline"} 
+                size={24} 
+                color="#3b82f6" 
+              />
             </TouchableOpacity>
           </View>
 
-          {/* Student List Section Header with Search */}
-          <View style={styles.studentListSection}>
-            <View style={styles.studentSectionHeader}>
-              <Text style={styles.sectionTitle}>Students in Session</Text>
-              {loadingStudents && (
-                <ActivityIndicator size="small" color="#4361ee" style={styles.loadingIndicator} />
+          {/* Loading Modal */}
+          <Modal
+            visible={dateInserted}
+            animationType="fade"
+            transparent={true}
+          >
+            <View style={styles.loadingModalOverlay}>
+              <View style={styles.loadingModalContent}>
+                <ActivityIndicator size="large" color="#3b82f6" />
+                <Text style={styles.loadingModalText}>
+                  Searching for date {dateFind.toLocaleDateString()}
+                </Text>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Download Modal */}
+          <Modal
+            visible={showDownloadModal}
+            animationType="fade"
+            transparent={true}
+            onRequestClose={() => setShowDownloadModal(false)}
+          >
+            <View style={styles.modalOverlay}>
+              <View style={styles.downloadModalContainer}>
+                <View style={styles.downloadModalHeader}>
+                  <Ionicons name="document-text" size={32} color="#3b82f6" />
+                  <Text style={styles.downloadModalTitle}>Download Data</Text>
+                </View>
+                
+                <Text style={styles.downloadModalText}>
+                  Found {fetchedRequests.length} request(s) for {dateFind.toLocaleDateString()}
+                </Text>
+                
+                <View style={styles.downloadModalActions}>
+                  <TouchableOpacity 
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={() => setShowDownloadModal(false)}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.modalButton, styles.downloadButton]}
+                    onPress={downloadExcel}
+                  >
+                    <Ionicons name="download-outline" size={18} color="#fff" />
+                    <Text style={styles.downloadButtonText}>Download Excel</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </Modal>
+
+          {/* Enhanced Session Info Card */}
+          {sessionInfoExpanded && (
+            <View style={styles.sessionInfoCard}>
+              <View style={styles.infoGrid}>
+                <View style={styles.infoItem}>
+                  <Ionicons name="calendar-outline" size={16} color="#3b82f6" />
+                  <Text style={styles.infoLabel}>Date</Text>
+                  <Text style={styles.infoValue}>
+                    {new Date(sessionData.start_time).toLocaleDateString()}
+                  </Text>
+                </View>
+               
+                <View style={styles.infoItem}>
+                  <Ionicons name="time-outline" size={16} color="#3b82f6" />
+                  <Text style={styles.infoLabel}>Time</Text>
+                  <Text style={styles.infoValue}>
+                    {new Date(sessionData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                  </Text>
+                </View>
+                
+                <View style={styles.infoItem}>
+                  <Ionicons name="school-outline" size={16} color="#3b82f6" />
+                  <Text style={styles.infoLabel}>College</Text>
+                  <Text style={styles.infoValue} numberOfLines={1}>
+                    {sessionData?.colleges?.name || 'Unknown'}
+                  </Text>
+                </View>
+              </View>
+            </View>
+          )}
+
+          {/* Enhanced Action Buttons */}
+          <View style={styles.actionButtonsContainer}>
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.credentialsButton]}
+              onPress={() => navigation.navigate('ShowCredentials', { sessionId: session?.id })}
+            >
+              <Ionicons name="key-outline" size={18} color="#fff" />
+              <Text style={styles.actionButtonText}>Credentials</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.deleteButton]}
+              onPress={openDeleteModal}
+            >
+              <Ionicons name="trash-outline" size={18} color="#fff" />
+              <Text style={styles.actionButtonText}>Delete</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Download Data Button */}
+          <View style={styles.downloadButtonContainer}>
+            <TouchableOpacity 
+              style={[styles.actionButton, styles.credentialsButton]}
+              onPress={() => showCalendar(true)}
+            >
+              <Ionicons name="cloud-download" size={18} color="#fff" />
+              <Text style={styles.actionButtonText}>Download Data</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* Enhanced Search Section */}
+          <View style={styles.searchSection}>
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={18} color="#64748b" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search name"
+                placeholderTextColor="#94a3b8"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                autoCapitalize="none"
+                autoCorrect={false}
+                returnKeyType="search"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
+                  <Ionicons name="close-circle" size={18} color="#64748b" />
+                </TouchableOpacity>
               )}
             </View>
             
-            {/* Search Input */}
-            <View style={styles.searchContainer}>
-              <View style={styles.searchInputContainer}>
-                <Ionicons name="search" size={20} color="#666" style={styles.searchIcon} />
-                <TextInput
-                  style={styles.searchInput}
-                  placeholder="Search students by name"
-                  placeholderTextColor="#999"
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  returnKeyType="done"
-                  blurOnSubmit={false}
-                />
-                {searchQuery.length > 0 && (
-                  <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-                    <Ionicons name="close-circle" size={20} color="#666" />
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-
-            {students.length === 0 && !loadingStudents ? (
-              <Text style={styles.noStudentsText}>No students in this session yet.</Text>
-            ) : filteredStudents.length === 0 && searchQuery ? (
-              <Text style={styles.noStudentsText}>No students found matching your search.</Text>
-            ) : students.length > 0 && (
-              <Text style={styles.searchResultsText}>
+            {/* Results Count */}
+            <View style={styles.resultsContainer}>
+              <Text style={styles.resultsText}>
                 Showing {filteredStudents.length} of {students.length} students
               </Text>
-            )}
+              {loadingStudents && (
+                <ActivityIndicator size="small" color="#3b82f6" style={styles.loadingIndicator} />
+              )}
+            </View>
           </View>
         </View>
 
-        {/* Scrollable Student List */}
+        {/* Student List */}
         <FlatList
           ref={flatListRef}
           data={filteredStudents}
@@ -366,16 +645,100 @@ const SessionDetails = () => {
           contentContainerStyle={styles.flatListContent}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="none"
+          keyboardDismissMode="on-drag"
           ListEmptyComponent={
-            !loadingStudents && students.length === 0 ? (
+            !loadingStudents ? (
               <View style={styles.emptyState}>
-                <Ionicons name="people-outline" size={48} color="#ccc" />
-                <Text style={styles.emptyStateText}>No students in this session</Text>
+                <View style={styles.emptyStateIcon}>
+                  <Ionicons name="people-outline" size={48} color="#cbd5e1" />
+                </View>
+                <Text style={styles.emptyStateTitle}>
+                  {searchQuery ? 'No students found' : 'No students enrolled'}
+                </Text>
+                <Text style={styles.emptyStateSubtitle}>
+                  {searchQuery ? 'Try adjusting your search terms' : 'Students will appear here once they join the session'}
+                </Text>
               </View>
             ) : null
           }
         />
+
+        {datePicker}
+
+        {/* Enhanced Delete Confirmation Modal */}
+        <Modal
+          animationType="fade"
+          transparent={true}
+          visible={deleteModalVisible}
+          onRequestClose={closeDeleteModal}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <View style={styles.modalHeader}>
+                <View style={styles.modalIcon}>
+                  <Ionicons name="warning" size={24} color="#dc2626" />
+                </View>
+                <View style={styles.modalTitleContainer}>
+                  <Text style={styles.modalTitle}>Delete</Text>
+                  <Text style={styles.modalSubtitle}>This action cannot be undone</Text>
+                </View>
+                <TouchableOpacity onPress={closeDeleteModal} style={styles.closeButton}>
+                  <Ionicons name="close" size={20} color="#64748b" />
+                </TouchableOpacity>
+              </View>
+              
+              <View style={styles.modalContent}>
+                <Text style={styles.modalText}>
+                  You are about to permanently delete this session and all associated data. 
+                  This will remove student records and cannot be recovered.
+                </Text>
+                
+                <View style={styles.verificationSection}>
+                  <Text style={styles.verificationLabel}>
+                    Enter this verification code to continue:
+                  </Text>
+                  <View style={styles.verificationCodeContainer}>
+                    <Text style={styles.verificationCode}>
+                      {generatedCode}
+                    </Text>
+                  </View>
+                </View>
+                
+                <TextInput
+                  style={styles.codeInput}
+                  placeholder="Enter code here"
+                  placeholderTextColor="#94a3b8"
+                  value={codeInput}
+                  onChangeText={setCodeInput}
+                  autoCorrect={false}
+                  returnKeyType="done"
+                  selectionColor="#3b82f6"
+                />
+                
+                <View style={styles.modalActions}>
+                  <TouchableOpacity 
+                    style={[styles.modalButton, styles.cancelButton]}
+                    onPress={closeDeleteModal}
+                  >
+                    <Text style={styles.cancelButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[
+                      styles.modalButton, 
+                      styles.confirmDeleteButton,
+                      !codeInput.trim() && styles.disabledButton
+                    ]}
+                    onPress={handleDeleteSession}
+                    disabled={!codeInput.trim()}
+                  >
+                    <Text style={styles.confirmDeleteButtonText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </View>
+          </View>
+        </Modal>
       </KeyboardAvoidingView>
     </ScreenWrapper>
   );
@@ -384,206 +747,466 @@ const SessionDetails = () => {
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#f8fafc',
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: '#f8fafc',
   },
-  flatListContent: {
-    paddingBottom: 30,
-  },
-  headerContainer: {
-    paddingHorizontal: 20,
-    paddingTop: 20,
+  // Header Section
+  headerSection: {
     backgroundColor: '#fff',
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 0,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 2,
   },
   header: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-  },
-  headerSpacer: {
-    width: 24, // Same as back button for balance
+    marginBottom: 16,
   },
   backButton: {
-    padding: 4,
+    padding: 8,
+    marginRight: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+  },
+  headerTitleContainer: {
+    flex: 1,
+    marginTop:'9%'
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#212529',
-    textAlign: 'center',
+    color: '#1e293b',
+    marginBottom: 2,
   },
+  subtitle: {
+    fontSize: 14,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  infoToggle: {
+    padding: 8,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+  },
+  // Session Info Card
   sessionInfoCard: {
-    backgroundColor: '#fff',
+    backgroundColor: '#f8fafc',
     borderRadius: 12,
-    padding: 20,
-    marginBottom: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
+    padding: 16,
+    marginBottom: 14,
+    borderLeftWidth: 4,
+    borderLeftColor: '#3b82f6',
   },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
-    marginBottom: 16,
+  infoGrid: {
+    gap: 12,
   },
-  infoRow: {
+  infoItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 8,
   },
   infoLabel: {
-    fontSize: 14,
-    color: '#495057',
-    marginLeft: 8,
-    marginRight: 8,
-    fontWeight: '500',
-    width: 80,
+    fontSize: 12,
+    color: '#64748b',
+    fontWeight: '600',
+    width: 50,
   },
   infoValue: {
     fontSize: 14,
-    color: '#333',
+    color: '#1e293b',
+    fontWeight: '500',
     flex: 1,
   },
-  credentialsButton: {
-    backgroundColor: '#4361ee',
-    borderRadius: 10,
-    padding: 16,
-    marginTop: 15,
+  // Action Buttons
+  actionButtonsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    gap: 12,
+    marginBottom: 16,
+    marginTop:'7%'
+  },
+  downloadButtonContainer: {
+    marginBottom: 16,
+    height:'15%'
+  },
+  actionButton: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 10,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 3,
   },
-  credentialsButtonContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  credentialsButton: {
+    backgroundColor: '#3b82f6',
   },
-  credentialsButtonText: {
+  deleteButton: {
+    backgroundColor: '#dc2626',
+  },
+  actionButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  // Loading Modal
+  loadingModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  loadingModalContent: {
+    backgroundColor: '#fff',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    minWidth: 250,
+  },
+  loadingModalText: {
+    marginTop: 16,
+    fontSize: 15,
+    color: '#475569',
+    textAlign: 'center',
+  },
+  // Download Modal
+  downloadModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 24,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  downloadModalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  downloadModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginTop: 12,
+  },
+  downloadModalText: {
+    fontSize: 15,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  downloadModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  downloadButton: {
+    backgroundColor: '#10b981',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  downloadButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
-    marginLeft: 10,
   },
-  studentListSection: {
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.05,
-    shadowRadius: 8,
-    elevation: 2,
-    marginBottom: 10
-  },
-  studentSectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  loadingIndicator: {
-    marginLeft: 10,
+  // Search Section
+  searchSection: {
+    gap: 8,
+    marginTop:'5%'
   },
   searchContainer: {
-    marginBottom: 16,
-  },
-  searchInputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f8f9fa',
-    borderRadius: 8,
-    paddingHorizontal: 12,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    paddingHorizontal: 16,
     borderWidth: 1,
-    borderColor: '#e9ecef',
+    borderColor: '#e2e8f0',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
   },
   searchIcon: {
-    marginRight: 8,
+    marginRight: 12,
   },
   searchInput: {
     flex: 1,
     fontSize: 16,
-    color: '#333',
-    paddingVertical: 12,
+    color: '#1e293b',
+    paddingVertical: 14,
   },
   clearButton: {
+    padding: 4,
+  },
+  resultsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  resultsText: {
+    fontSize: 13,
+    color: '#64748b',
+    fontWeight: '500',
+  },
+  loadingIndicator: {
     marginLeft: 8,
   },
-  searchResultsText: {
-    fontSize: 14,
-    color: '#666',
-    textAlign: 'center',
-    marginBottom: 10,
-  },
-  noStudentsText: {
-    textAlign: 'center',
-    fontSize: 16,
-    color: '#666',
-    paddingVertical: 20,
+  // Student List
+  flatListContent: {
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 20,
   },
   studentCard: {
-    backgroundColor: '#f8f9fa',
-    borderRadius: 10,
-    padding: 15,
-    marginBottom: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 8,
     borderWidth: 1,
-    borderColor: '#e9ecef',
-    marginHorizontal: 20,
+    borderColor: '#f1f5f9',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  firstStudentCard: {
+    marginTop: 0,
+  },
+  lastStudentCard: {
+    marginBottom: 0,
+  },
+  studentAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#3b82f6',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  avatarText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  studentContent: {
+    flex: 1,
   },
   studentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
-  },
-  studentInfo: {
-    flex: 1,
+    marginBottom: 6,
   },
   studentName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#333',
-  },
-  studentEmail: {
-    fontSize: 12,
-    color: '#666',
-    marginTop: 2,
+    color: '#1e293b',
+    flex: 1,
+    marginRight: 8,
   },
   studentDetails: {
-    marginBottom: 8,
+    gap: 4,
   },
-  studentDetailRow: {
+  detailItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 4,
+    gap: 6,
   },
-  studentDetail: {
-    fontSize: 14,
-    color: '#495057',
-    marginLeft: 8,
+  detailText: {
+    fontSize: 13,
+    color: '#64748b',
   },
+  // Empty State
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 40,
-    marginHorizontal: 20,
+    paddingVertical: 80,
+    paddingHorizontal: 40,
   },
-  emptyStateText: {
+  emptyStateIcon: {
+    marginBottom: 16,
+  },
+  emptyStateTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 8,
+  },
+  emptyStateSubtitle: {
+    fontSize: 14,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  // Modal Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.6)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+    overflow: 'hidden',
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 24,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f1f5f9',
+    backgroundColor: '#fef2f2',
+  },
+  modalIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#fecaca',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  modalTitleContainer: {
+    flex: 1,
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#dc2626',
+    marginBottom: 2,
+  },
+  modalSubtitle: {
+    fontSize: 14,
+    color: '#ef4444',
+  },
+  closeButton: {
+    padding: 4,
+  },
+  modalContent: {
+    padding: 24,
+  },
+  modalText: {
+    fontSize: 15,
+    color: '#475569',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  verificationSection: {
+    marginBottom: 20,
+  },
+  verificationLabel: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 12,
+    fontWeight: '500',
+  },
+  verificationCodeContainer: {
+    backgroundColor: '#f8fafc',
+    padding: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderStyle: 'dashed',
+  },
+  verificationCode: {
+    fontSize: 28,
+    fontWeight: '700',
+    color: '#1e293b',
+    textAlign: 'center',
+    letterSpacing: 3,
+  },
+  codeInput: {
+    borderWidth: 2,
+    borderColor: '#e2e8f0',
+    borderRadius: 12,
+    padding: 16,
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 24,
+    backgroundColor: '#f8fafc',
+    color: '#1e293b',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop:'9%'
+  },
+  modalButton: {
+    flex: 1,
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: '#f1f5f9',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  confirmDeleteButton: {
+    backgroundColor: '#dc2626',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  cancelButtonText: {
+    color: '#64748b',
     fontSize: 16,
-    color: '#666',
-    marginTop: 12,
+    fontWeight: '600',
+  },
+  confirmDeleteButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
-
 export default SessionDetails;

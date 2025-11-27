@@ -3,7 +3,7 @@ import { supabase } from '@/lib/supabase';
 import { findRequest } from '@/services/findRequest';
 import { Feather, Ionicons, MaterialIcons } from '@expo/vector-icons';
 import Entypo from '@expo/vector-icons/Entypo';
-import { useIsFocused } from '@react-navigation/native';
+import { useIsFocused, useRoute } from '@react-navigation/native';
 import * as Application from 'expo-application';
 import * as Crypto from 'expo-crypto';
 import 'expo-mail-composer';
@@ -12,6 +12,7 @@ import { useFocusEffect, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator, Alert,
+  BackHandler,
   Dimensions,
   Modal,
   Platform,
@@ -32,7 +33,6 @@ import CollegeForm from './CollegeForm';
 import ConnectSessionForm from './ConnectSessionForm';
 import SessionCard from './SessionCard';
 import { styles } from './adminStyles';
-
 const { width } = Dimensions.get('window');
 const MemoizedMaterialIcons = React.memo(MaterialIcons);
 
@@ -60,11 +60,13 @@ const AdminDashboard = () => {
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [alert, setAlert] = useState({visible: false, title: '', message: '', buttons: []});
   const [newQr, setNewQr] = useState(false);
-
+  const route = useRoute();
   // Memoized callbacks
   const showAlert = useCallback((title, message, buttons = []) => {
     setAlert({visible: true, title, message, buttons});
   }, []);
+
+
 
   const fetchSessions = useCallback(async () => {
     if (!user?.id) return;
@@ -475,7 +477,40 @@ const AdminDashboard = () => {
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
+  useFocusEffect(
+    useCallback(() => {
+   console.log(`Route name is ${route.name}`);
+      if (route.name !== 'Admin') {
+        return; // Don't add handler for other routes
+      }
 
+      const backAction = () => {
+        Alert.alert(
+          'Exit App',
+          'Do you want to exit the app?',
+          [
+            {
+              text: 'Cancel',
+              onPress: () => null,
+              style: 'cancel'
+            },
+            {
+              text: 'Exit',
+              onPress: () => BackHandler.exitApp()
+            }
+          ]
+        );
+        return true; // Prevent default back behavior
+      };
+
+      const backHandler = BackHandler.addEventListener(
+        'hardwareBackPress',
+        backAction
+      );
+
+      return () => backHandler.remove();
+    }, [route.name])
+  );
   useEffect(() => {
     if (isFocused) {
       fetchSessions();

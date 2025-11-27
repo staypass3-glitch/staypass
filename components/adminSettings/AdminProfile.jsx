@@ -10,19 +10,17 @@ import { supabase } from '@/lib/supabase';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  Image,
+  ActivityIndicator, BackHandler, Image,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
-  View
+  View,
 } from 'react-native';
-
 // Error messages constants
 const ERROR_MESSAGES = {
   PERMISSION_CAMERA: 'Permission not granted. Please give camera permissions to take pictures.',
@@ -56,7 +54,14 @@ const AdminProfile = () => {
   }, []);
 
 
+  useEffect(()=>{
+        const backHandler = BackHandler.addEventListener('hardwareBackPress',()=>{
+          Navigation.goBack();
+          return true;
+        });
 
+        return ()=> backHandler.remove();
+  },[])
   // Memoize permission request logic
   const requestPermission = useCallback(async (permissionType, errorMessage) => {
     try {

@@ -168,7 +168,7 @@ const SignInScreen = () => {
               />
               <TouchableOpacity onPress={togglePasswordVisibility} style={styles.eyeIcon}>
                 <MaterialIcons 
-                  name={secureTextEntry ? "visibility" : "visibility-off"} 
+                  name={!secureTextEntry ? "visibility" : "visibility-off"} 
                   size={22} 
                   color="#999" 
                 />

@@ -7,16 +7,15 @@ import { useUser } from '@/context/UserContext';
 import { supabase } from '@/lib/supabase';
 import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from 'expo-router';
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Linking,
+  ActivityIndicator, BackHandler, Linking,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
-} from "react-native";
+} from 'react-native';
 
 const AllSettings = () => {
   const [isLoading, setIsLoading] = useState(false);
@@ -37,6 +36,15 @@ const AllSettings = () => {
     isLoading || leaveSessionLoading || logoutLoading, 
     [isLoading, leaveSessionLoading, logoutLoading]
   );
+
+    useEffect(()=>{
+      const backHandler = BackHandler.addEventListener('hardwareBackPress',()=>{
+        navigation.goBack();
+        return true;
+      });
+  
+      return ()=> backHandler.remove();
+  },[])
 
   const showAlert = useCallback((title, message, buttons = []) => {
     // Don't show new alerts during blocking operations

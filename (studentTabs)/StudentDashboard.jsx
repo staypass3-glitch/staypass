@@ -25,7 +25,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 // Constants - moved outside component
-const REJECTION_COOLDOWN = 3 * 60 * 60;
+const REJECTION_COOLDOWN = 30*60;
 
 const COLORS = {
   primary: '#2563eb',
@@ -79,6 +79,10 @@ const StudentDashboard = () => {
     logoutLoading: false,
     currentRequestId: null,
     hasLocation: false,
+    // New state for password modal
+    showPasswordModal: false,
+    password: '',
+    verifyingPassword: false,
   });
 
   const [customAlert, setCustomAlert] = useState({ 
@@ -91,6 +95,7 @@ const StudentDashboard = () => {
   // Refs
   const qrFadeAnim = useRef(new Animated.Value(0)).current;
   const isMountedRef = useRef(true);
+  const passwordInputRef = useRef(null);
 
   // Memoized date values
   const { today, maxDate } = useMemo(() => {
@@ -111,6 +116,140 @@ const StudentDashboard = () => {
   const showAlert = useCallback((title, message, buttons = []) => {
     setCustomAlert({ visible: true, title, message, buttons });
   }, []);
+
+  // Password verification function
+  const verifyPassword = useCallback(async (password) => {
+    try {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: password,
+      });
+      
+      return !error; // Return true if no error (password is correct)
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      return false;
+    }
+  }, [user?.email]);
+
+  // Handle password submission
+  const handlePasswordSubmit = useCallback(async () => {
+    if (!state.password.trim()) {
+      showAlert('Error', 'Please enter your password', [{ text: 'OK' }]);
+      return;
+    }
+
+    updateState({ verifyingPassword: true });
+
+    const isPasswordCorrect = await verifyPassword(state.password);
+    
+    if (isPasswordCorrect) {
+      // Password is correct, proceed with request submission
+      updateState({ 
+        showPasswordModal: false, 
+        password: '', 
+        verifyingPassword: false 
+      });
+      submitRequestAfterPasswordVerification();
+    } else {
+      // Password is incorrect
+      updateState({ verifyingPassword: false });
+      showAlert('Error', 'Incorrect password. Please try again.', [{ text: 'OK' }]);
+    }
+  }, [state.password, verifyPassword, showAlert, updateState]);
+
+  // Original submit request logic (now called after password verification)
+  const submitRequestAfterPasswordVerification = useCallback(async () => {
+    const trimmedDescription = state.description.trim();
+    
+    // Validation
+    if (!trimmedDescription) {
+      showAlert('Error', 'Please enter a description', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (state.dateToCome <= state.dateToGo) {
+      showAlert('Error', 'Return date must be after departure date', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (!state.collegeId) {
+      showAlert('Error', 'College ID not found', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (state.lastRejectedAt) {
+      const timeDifference = (Date.now() - new Date(state.lastRejectedAt).getTime()) / (1000 * 60 * 60);
+      if (timeDifference < 30) {
+        showAlert('Error', 'You can only submit a new request after 30 minutes from the last rejection.', [{ text: 'OK' }]);
+        return;
+      }
+    }
+
+    try {
+      updateState({ loading: true });
+
+      const { error } = await supabase
+        .from('requests')
+        .insert([{
+          student_id: user.id,
+          college_id: state.collegeId,
+          description: trimmedDescription,
+          date_to_go: state.dateToGo.toISOString().split('T')[0],
+          date_to_come: state.dateToCome.toISOString().split('T')[0],
+          session_id: state.sessionId,
+          admin_id: state.adminId,
+          status: 'pending',
+        }]);
+
+      if (error) throw error;
+
+      showAlert('Success', 'Request submitted successfully', [{ text: 'OK' }]);
+      updateState({ 
+        description: '', 
+        dateToGo: new Date(), 
+        dateToCome: new Date(),
+        loading: false 
+      });
+      fetchData();
+    } catch (error) {
+      console.error('Error submitting request:', error);
+      showAlert('Error', error.message || 'Failed to submit request', [{ text: 'OK' }]);
+      updateState({ loading: false });
+    }
+  }, [state.description, state.dateToGo, state.dateToCome, state.collegeId, state.sessionId, state.adminId, state.lastRejectedAt, user?.id, fetchData, showAlert, updateState]);
+
+  // Modified submit request function - now shows password modal
+  const submitRequest = useCallback(() => {
+    const trimmedDescription = state.description.trim();
+    
+    // Basic validation before showing password modal
+    if (!trimmedDescription) {
+      showAlert('Error', 'Please enter a description', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (state.dateToCome <= state.dateToGo) {
+      showAlert('Error', 'Return date must be after departure date', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (!state.collegeId) {
+      showAlert('Error', 'College ID not found', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (state.lastRejectedAt) {
+      const timeDifference = (Date.now() - new Date(state.lastRejectedAt).getTime()) / (1000 * 60 * 60);
+      if (timeDifference < 30) {
+        showAlert('Error', 'You can only submit a new request after 30 minutes from the last rejection.', [{ text: 'OK' }]);
+        return;
+      }
+    }
+
+    // All validations passed, show password modal
+    updateState({ showPasswordModal: true });
+  }, [state.description, state.dateToGo, state.dateToCome, state.collegeId, state.lastRejectedAt, showAlert, updateState]);
 
   // QR Code generation - optimized
   const generateQRCode = useCallback((type, collegeId, sessionId) => {
@@ -229,67 +368,6 @@ const StudentDashboard = () => {
     }
   }, [user?.id, generateQRCode, updateState, showAlert, navigation]);
 
-  // Request submission - optimized validation
-  const submitRequest = useCallback(async () => {
-    const trimmedDescription = state.description.trim();
-    
-    // Validation
-    if (!trimmedDescription) {
-      showAlert('Error', 'Please enter a description', [{ text: 'OK' }]);
-      return;
-    }
-
-    if (state.dateToCome <= state.dateToGo) {
-      showAlert('Error', 'Return date must be after departure date', [{ text: 'OK' }]);
-      return;
-    }
-
-    if (!state.collegeId) {
-      showAlert('Error', 'College ID not found', [{ text: 'OK' }]);
-      return;
-    }
-
-    if (state.lastRejectedAt) {
-      const timeDifference = (Date.now() - new Date(state.lastRejectedAt).getTime()) / (1000 * 60 * 60);
-      if (timeDifference < 3) {
-        showAlert('Error', 'You can only submit a new request after 3 hours from the last rejection.', [{ text: 'OK' }]);
-        return;
-      }
-    }
-
-    try {
-      updateState({ loading: true });
-
-      const { error } = await supabase
-        .from('requests')
-        .insert([{
-          student_id: user.id,
-          college_id: state.collegeId,
-          description: trimmedDescription,
-          date_to_go: state.dateToGo.toISOString().split('T')[0],
-          date_to_come: state.dateToCome.toISOString().split('T')[0],
-          session_id: state.sessionId,
-          admin_id: state.adminId,
-          status: 'pending',
-        }]);
-
-      if (error) throw error;
-
-      showAlert('Success', 'Request submitted successfully', [{ text: 'OK' }]);
-      updateState({ 
-        description: '', 
-        dateToGo: new Date(), 
-        dateToCome: new Date(),
-        loading: false 
-      });
-      fetchData();
-    } catch (error) {
-      console.error('Error submitting request:', error);
-      showAlert('Error', error.message || 'Failed to submit request', [{ text: 'OK' }]);
-      updateState({ loading: false });
-    }
-  }, [state.description, state.dateToGo, state.dateToCome, state.collegeId, state.sessionId, state.adminId, state.lastRejectedAt, user?.id, fetchData, showAlert, updateState]);
-
   // Initial fetch effect
   useEffect(() => {
     if (user?.id) {
@@ -332,18 +410,18 @@ const StudentDashboard = () => {
     updateState({ timeRemaining: remainingTime });
 
     const timer = setInterval(() => {
-      updateState(prev => {
+      setState(prev => {
         const newTime = prev.timeRemaining - 1;
         if (newTime <= 0) {
           clearInterval(timer);
-          return { timeRemaining: 0 };
+          return { ...prev, timeRemaining: 0 };
         }
-        return { timeRemaining: newTime };
+        return { ...prev, timeRemaining: newTime };
       });
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [state.lastRejectedAt, updateState]);
+  }, [state.lastRejectedAt]);
 
   // QR fade animation effect
   useEffect(() => {
@@ -357,6 +435,15 @@ const StudentDashboard = () => {
       qrFadeAnim.setValue(0);
     }
   }, [state.qrData, qrFadeAnim]);
+
+  // Focus password input when modal opens
+  useEffect(() => {
+    if (state.showPasswordModal && passwordInputRef.current) {
+      setTimeout(() => {
+        passwordInputRef.current?.focus();
+      }, 100);
+    }
+  }, [state.showPasswordModal]);
 
   // Memoized date pickers
   const DatePickers = useMemo(() => (
@@ -399,6 +486,66 @@ const StudentDashboard = () => {
       )}
     </>
   ), [state.showDatePickerGo, state.showDatePickerCome, state.dateToGo, state.dateToCome, today, maxDate, updateState]);
+
+  // Password Modal Component
+  const PasswordModal = useMemo(() => (
+    <Modal
+      visible={state.showPasswordModal}
+      transparent={true}
+      animationType="slide"
+      onRequestClose={() => updateState({ showPasswordModal: false, password: '' })}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.passwordModal}>
+          <View style={styles.passwordModalHeader}>
+            <Text style={styles.passwordModalTitle}>Verify Your Identity</Text>
+            <Text style={styles.passwordModalSubtitle}>
+              Please enter your password to submit the request
+            </Text>
+          </View>
+
+          <View style={styles.passwordInputContainer}>
+            <Text style={styles.passwordLabel}>Password</Text>
+            <TextInput
+              ref={passwordInputRef}
+              style={styles.passwordInput}
+              placeholder="Enter your password"
+              placeholderTextColor="#9ca3af"
+              value={state.password}
+              onChangeText={(text) => updateState({ password: text })}
+              secureTextEntry
+              autoCapitalize="none"
+              autoCorrect={false}
+              onSubmitEditing={handlePasswordSubmit}
+            />
+          </View>
+
+          <View style={styles.passwordModalButtons}>
+            <TouchableOpacity
+              style={[styles.passwordButton, styles.cancelButton]}
+              onPress={() => updateState({ showPasswordModal: false, password: '' })}
+              disabled={state.verifyingPassword}
+            >
+              <Text style={styles.cancelButtonText}>Cancel</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.passwordButton, styles.submitButton, 
+                state.verifyingPassword && styles.disabledButton]}
+              onPress={handlePasswordSubmit}
+              disabled={state.verifyingPassword}
+            >
+              {state.verifyingPassword ? (
+                <ActivityIndicator size="small" color="white" />
+              ) : (
+                <Text style={styles.submitButtonText}>Verify</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+      </View>
+    </Modal>
+  ), [state.showPasswordModal, state.password, state.verifyingPassword, handlePasswordSubmit, updateState]);
 
   // Memoized status content
   const renderStatusContent = useMemo(() => {
@@ -605,6 +752,9 @@ const StudentDashboard = () => {
           {DatePickers}
         </ScrollView>
       </View>
+      
+      {/* Password Modal */}
+      {PasswordModal}
       
       <CustomAlert
         visible={customAlert.visible}
@@ -829,6 +979,93 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#2563eb',
+  },
+  // New styles for password modal
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
+  },
+  passwordModal: {
+    backgroundColor: 'white',
+    borderRadius: 16,
+    padding: 24,
+    width: '100%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.25,
+    shadowRadius: 12,
+    elevation: 8,
+  },
+  passwordModalHeader: {
+    marginBottom: 24,
+    alignItems: 'center',
+  },
+  passwordModalTitle: {
+    fontSize: fonts.fontSizes.xl,
+    fontWeight: fonts.fontWeights.bold,
+    color: theme.colors.darkText,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  passwordModalSubtitle: {
+    fontSize: fonts.fontSizes.md,
+    color: theme.colors.gray,
+    textAlign: 'center',
+    lineHeight: 20,
+  },
+  passwordInputContainer: {
+    marginBottom: 24,
+  },
+  passwordLabel: {
+    fontSize: fonts.fontSizes.sm,
+    fontWeight: fonts.fontWeights.medium,
+    color: theme.colors.darkGray,
+    marginBottom: 8,
+  },
+  passwordInput: {
+    borderWidth: 1,
+    borderColor: theme.colors.lightGray,
+    borderRadius: 8,
+    padding: 16,
+    fontSize: fonts.fontSizes.md,
+    backgroundColor: theme.colors.lightBackground,
+    color: 'black',
+  },
+  passwordModalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  passwordButton: {
+    flex: 1,
+    borderRadius: 8,
+    padding: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  cancelButton: {
+    backgroundColor: theme.colors.lightgray,
+  },
+  submitButton: {
+    backgroundColor: COLORS.primary,
+  },
+  disabledButton: {
+    opacity: 0.6,
+  },
+  cancelButtonText: {
+    color: theme.colors.darkText,
+    fontWeight: fonts.fontWeights.semibold,
+    fontSize: fonts.fontSizes.md,
+    borderColor:'black',
+  },
+  submitButtonText: {
+    color: 'white',
+    fontWeight: fonts.fontWeights.semibold,
+    fontSize: fonts.fontSizes.md,
   },
 });
 

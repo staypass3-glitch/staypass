@@ -1,3 +1,4 @@
+import { ImagePickerAlert } from '@/components/ImagePickerAlert';
 import { useAuth } from '@/context/AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
@@ -5,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import * as ImagePicker from 'expo-image-picker';
 import { LinearGradient } from 'expo-linear-gradient';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -41,7 +42,14 @@ const SignUpScreen = () => {
   const [touched, setTouched] = useState({});
   const [loading,setLoading] = useState(false);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
+   const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', buttons: [] });
   const {signUp,signIn} = useAuth();
+
+  
+    const showAlert = useCallback((title, message, buttons = []) => {
+      setCustomAlert({ visible: true, title, message, buttons });
+    }, []);
+  
   // Handle keyboard events
   useEffect(() => {
     const keyboardDidShowListener = Keyboard.addListener(
@@ -287,7 +295,7 @@ const SignUpScreen = () => {
   };
 
   const showImagePicker = () => {
-    Alert.alert(
+showAlert(
       'Select Profile Photo',
       'Choose how you want to add your profile photo',
       [
@@ -487,7 +495,7 @@ const SignUpScreen = () => {
               />
                <TouchableOpacity onPress={togglePasswordVisibility} style={styles.eyeIcon}>
                               <MaterialIcons 
-                                name={secureTextEntry ? "visibility" : "visibility-off"} 
+                                name={!secureTextEntry ? "visibility" : "visibility-off"} 
                                 size={22} 
                                 color="#999" 
                               />
@@ -625,6 +633,18 @@ const SignUpScreen = () => {
             {isKeyboardVisible && <View style={{ height: 0 }} />}
           </ScrollView>
         </View>
+                  <ImagePickerAlert
+                visible={customAlert.visible}
+                title={customAlert.title}
+                message={customAlert.message}
+                buttons={customAlert.buttons}
+                onDismiss={() => setCustomAlert({ 
+                  visible: false, 
+                  title: '', 
+                  message: '', 
+                  buttons: [] 
+                })}
+              />
       </View>
    </View>
   );

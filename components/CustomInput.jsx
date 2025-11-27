@@ -51,7 +51,7 @@ export default CustomInput;
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    alignItems: 'center' // center horizontally if needed
+    alignItems: 'center', // center horizontally if needed
   },
   buttonContainer: {
     flexDirection: 'row',
@@ -60,15 +60,17 @@ const styles = StyleSheet.create({
     shadowOffset: { height: 15, width: 10 },
     shadowColor: 'black',
     opacity: 0.5,
-    elevation: 8,
-    borderRadius: 25,
     paddingHorizontal: 15,
     paddingVertical: 10,
-    alignItems: 'center' 
+    alignItems: 'center',
+    borderColor:'black',
+    borderWidth:2,
+    borderStyle:'solid',
+    borderRadius:5 
   },
   input: {
     flex: 1,
-    color: 'black'
+    color: 'black',
   },
   icon: {
     marginLeft: 10

@@ -1,5 +1,7 @@
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import * as FileSystem from 'expo-file-system';
+import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,6 +16,7 @@ import {
   TouchableWithoutFeedback,
   View
 } from 'react-native';
+import * as XLSX from 'xlsx';
 import { useAuth } from '../context/AuthContext.js';
 import { supabase } from '../lib/supabase.js';
 import ScreenWrapper from './ScreenWrapper.jsx';
@@ -31,6 +34,7 @@ const StudentHistory = () => {
   const [department, setDepartment] = useState(student.department);
   const [menuVisible, setMenuVisible] = useState(false);
   const [latestIncompleteRequest, setLatestIncompleteRequest] = useState(null);
+  const [excelGenerating, setExcelGenerating] = useState(false);
 
   const fetchStudentHistory = useCallback(async (studentId) => {
     try {
@@ -121,8 +125,9 @@ const StudentHistory = () => {
               // Remove student from college_students table
               const { error } = await supabase
                 .from('profiles')
-                .update({college_id:null,
-                     current_session_id:null
+                .update({
+                  college_id: null,
+                  current_session_id: null
                 })
                 .eq('id', student.id)
                 .eq('college_id', collegeId);
@@ -148,6 +153,108 @@ const StudentHistory = () => {
       ]
     );
   }, [student.id, student.name, collegeId, navigation]);
+
+  // ✅ EXCEL GENERATION FUNCTION
+  const handleGenerateExcel = useCallback(async () => {
+    setMenuVisible(false);
+    
+    if (studentHistory.length === 0) {
+      Alert.alert('No Data', 'There is no request history to export.');
+      return;
+    }
+
+    try {
+      setExcelGenerating(true);
+
+      // Format data for Excel
+      const excelData = studentHistory.map((request, index) => ({
+        'Sr No': index + 1,
+        'Request Date': new Date(request.created_at).toLocaleDateString(),
+        'Request Time': new Date(request.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
+        'Description': request.description,
+        'Status': request.status.toUpperCase(),
+        'Date to Go': new Date(request.date_to_go).toLocaleDateString(),
+        'Date to Come': new Date(request.date_to_come).toLocaleDateString(),
+        'Decided At': request.decided_at ? new Date(request.decided_at).toLocaleString() : 'N/A',
+        'Scan Out': request.actual_scan_out ? new Date(request.actual_scan_out).toLocaleString() : 'N/A',
+        'Scan In': request.actual_scan_in ? new Date(request.actual_scan_in).toLocaleString() : 'N/A',
+        'Location': request.location || 'N/A'
+      }));
+
+      // Create worksheet starting from row 8
+      const ws = XLSX.utils.json_to_sheet(excelData, { origin: "A8" });
+
+      // Add title rows
+      const titles = [
+        [`Student Name: ${student.name}`],
+        [`Phone Number: ${student.phone_number || 'N/A'}`],
+        [`Room Number: ${student.room_number || 'N/A'}`],
+        [`Department: ${department || 'N/A'}`],
+        [`Joined At: ${student.last_joined_at ? new Date(student.last_joined_at).toLocaleString() : 'N/A'}`],
+        [] // Empty row before data
+      ];
+
+      XLSX.utils.sheet_add_aoa(ws, titles, { origin: "A1" });
+
+      // Merge cells for better layout
+      ws["!merges"] = [
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } },
+        { s: { r: 4, c: 0 }, e: { r: 4, c: 5 } },
+        { s: { r: 5, c: 0 }, e: { r: 5, c: 5 } }
+      ];
+
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 8 },  // Sr No
+        { wch: 15 }, // Request Date
+        { wch: 12 }, // Request Time
+        { wch: 30 }, // Description
+        { wch: 12 }, // Status
+        { wch: 15 }, // Date to Go
+        { wch: 15 }, // Date to Come
+        { wch: 20 }, // Decided At
+        { wch: 20 }, // Scan Out
+        { wch: 20 }, // Scan In
+        { wch: 20 }  // Location
+      ];
+
+      // Create workbook
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Student History");
+
+      // Generate base64
+      const base64 = XLSX.write(wb, { type: "base64", bookType: "xlsx" });
+
+      // Save and share
+      const fileName = `${student.name.replace(/\s+/g, '_')}_History_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const fileUri = FileSystem.documentDirectory + fileName;
+      
+      await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: FileSystem.EncodingType.Base64
+      });
+
+      // Check if sharing is available
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      
+      if (sharingAvailable) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+          dialogTitle: 'Save Excel File',
+          UTI: 'com.microsoft.excel.xlsx'
+        });
+      } else {
+        Alert.alert('Success', 'Excel file generated but sharing is not available on this device.');
+      }
+
+    } catch (error) {
+      console.error('Error generating Excel:', error);
+      Alert.alert('Error', 'Failed to generate Excel file. Please try again.');
+    } finally {
+      setExcelGenerating(false);
+    }
+  }, [studentHistory, student, department]);
 
   const toggleMenu = useCallback(() => {
     setMenuVisible(!menuVisible);
@@ -320,7 +427,7 @@ const StudentHistory = () => {
           </Text>
         </View>
         <View style={styles.detailRow}>
-        <Feather name="briefcase" size={12} color="#6c757d" /> 
+          <Feather name="briefcase" size={12} color="#6c757d" /> 
           <Text style={styles.detailText}>
             {department || 'No Department found'}
           </Text>
@@ -443,6 +550,17 @@ const StudentHistory = () => {
                 
                 <TouchableOpacity 
                   style={styles.menuItem}
+                  onPress={handleGenerateExcel}
+                  disabled={excelGenerating}
+                >
+                  <Ionicons name="document-text-sharp" size={20} color="#10b981" />
+                  <Text style={styles.menuItemTextExcel}>
+                    {excelGenerating ? 'Generating...' : 'Generate Excel'}
+                  </Text>
+                </TouchableOpacity>
+
+                <TouchableOpacity 
+                  style={styles.menuItem}
                   onPress={closeMenu}
                 >
                   <Ionicons name="close-outline" size={20} color="#666" />
@@ -453,6 +571,16 @@ const StudentHistory = () => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
+
+      {/* Loading Overlay for Excel Generation */}
+      {excelGenerating && (
+        <View style={styles.loadingOverlay}>
+          <View style={styles.loadingContent}>
+            <ActivityIndicator size="large" color="#4361ee" />
+            <Text style={styles.loadingText}>Generating Excel...</Text>
+          </View>
+        </View>
+      )}
     </ScreenWrapper>
   );
 };
@@ -633,7 +761,6 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     lineHeight: 20,
   },
-  // Location Button Styles
   locationButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -655,7 +782,6 @@ const styles = StyleSheet.create({
     borderTopColor: '#f1f3f5',
     paddingTop: 12,
   },
-  // Image Viewer Styles
   modalContainer: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.9)',
@@ -686,7 +812,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     borderRadius: 16,
   },
-  // Menu Styles
   menuOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
@@ -703,6 +828,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.25,
     shadowRadius: 8,
     elevation: 5,
+    marginBottom: '50%',
+    marginLeft: '20%'
   },
   menuItem: {
     flexDirection: 'row',
@@ -721,6 +848,40 @@ const styles = StyleSheet.create({
     color: '#ef4444',
     fontWeight: '500',
     marginLeft: 12,
+  },
+  menuItemTextExcel: {
+    fontSize: 16,
+    color: '#10b981',
+    fontWeight: '500',
+    marginLeft: 12,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 9999,
+  },
+  loadingContent: {
+    backgroundColor: '#fff',
+    padding: 30,
+    borderRadius: 12,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.25,
+    shadowRadius: 8,
+    elevation: 5,
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#333',
+    fontWeight: '500',
   },
 });
 
