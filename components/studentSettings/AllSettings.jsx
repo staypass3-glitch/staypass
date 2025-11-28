@@ -47,7 +47,7 @@ const AllSettings = () => {
   },[])
 
   const showAlert = useCallback((title, message, buttons = []) => {
-    // Don't show new alerts during blocking operations
+
     if (isBlockingOperation) return;
     
     setCustomAlert({ visible: true, title, message, buttons });
@@ -309,9 +309,16 @@ const AllSettings = () => {
       iconColor: theme.colors.primary,
     },
     {
+      id: 'forgotPassword',
+      title: 'Forgot Password',
+      icon: 'password',
+      onPress: '',
+      iconColor: theme.colors.primary,
+    },
+    {
       id: 'feedback',
       title: 'Feedback',
-      icon: 'info-outline',
+      icon: 'feedback',
       onPress: handleAboutUs,
       iconColor: theme.colors.primary,
     },
@@ -410,7 +417,7 @@ const AllSettings = () => {
           {/* Account Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Account</Text>
-            {menuItems.slice(0, 2).map((item) => (
+            {menuItems.slice(0, 4).map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={[
@@ -431,7 +438,7 @@ const AllSettings = () => {
           {/* Session Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Session</Text>
-            {menuItems.slice(3).map((item) => (
+            {menuItems.slice(4).map((item) => (
               <TouchableOpacity
                 key={item.id}
                 style={[

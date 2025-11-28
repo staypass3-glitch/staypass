@@ -282,10 +282,29 @@ const History = () => {
           
           {item.description && (
             <View style={styles.descriptionContainer}>
-              <Text style={styles.label}>Description:</Text>
-              <Text style={styles.descriptionText} numberOfLines={3} ellipsizeMode="tail">
-                {item.description}
-              </Text>
+              {/* Description */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.label}>Description:</Text>
+                <Text
+                  style={styles.descriptionText}
+                  numberOfLines={3}
+                  ellipsizeMode="tail"
+                >
+                  {item.description}
+                </Text>
+              </View>
+
+              {/* Destination */}
+              <View style={styles.fieldContainer}>
+                <Text style={styles.label}>Destination:</Text>
+                <Text
+                  style={styles.descriptionText}
+                  numberOfLines={3}
+                  ellipsizeMode="tail"
+                >
+                  {item.destination}
+                </Text>
+              </View>
             </View>
           )}
         </LinearGradient>
@@ -607,10 +626,13 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e9ecef',
   },
+  fieldContainer: {
+    marginBottom: 12,
+  },
   descriptionText: {
     fontSize: 14,
     color: '#495057',
-    marginTop: 8,
+    marginTop: 4,
     lineHeight: 20,
   },
   loadingContainer: {

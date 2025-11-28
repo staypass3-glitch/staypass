@@ -135,6 +135,7 @@ const AdminDashboard = () => {
           importance: Notifications.AndroidImportance.MAX,
           vibrationPattern: [0, 250, 250, 250],
           lightColor: '#FF231F7C',
+          sound:'custom_noti',
         });
       }
     } catch (error) {
@@ -485,10 +486,10 @@ const AdminDashboard = () => {
       }
 
       const backAction = () => {
-        Alert.alert(
-          'Exit App',
-          'Do you want to exit the app?',
-          [
+       setAlert({
+          title:'Exit App',
+          message:'Do you want to exit the app?',
+          buttons:[
             {
               text: 'Cancel',
               onPress: () => null,
@@ -499,7 +500,7 @@ const AdminDashboard = () => {
               onPress: () => BackHandler.exitApp()
             }
           ]
-        );
+      });
         return true; // Prevent default back behavior
       };
 
@@ -772,7 +773,10 @@ const AdminDashboard = () => {
                       onPress={handlePendingRequests}
                     >
                       <View style={styles.buttonContent}>
+                        <View style={styles.bellStyle}>
                         {isRequestPresent && <Entypo name="bell" size={20} color="yellow" />}
+                        </View>
+                        
                         <Text style={styles.buttonText}>Requests</Text>
                       </View>
                     </TouchableOpacity>

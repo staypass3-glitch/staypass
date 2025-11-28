@@ -53,6 +53,7 @@ const PendingApproval = () => {
           created_at,
           student_id,
           description,
+          destination,
           profiles:student_id (id, name, phone_number, room_number, department, profile_image)
         `)
         .eq('college_id', collegeId)
@@ -195,6 +196,14 @@ const PendingApproval = () => {
         
         <View style={styles.requestContent}>
           <Text style={styles.description}>{item.description}</Text>
+          
+          {/* Destination Display */}
+          {item.destination && (
+            <View style={styles.destinationContainer}>
+              <Feather name="map-pin" size={14} color="#4361ee" />
+              <Text style={styles.destinationText}>{item.destination}</Text>
+            </View>
+          )}
           
           <View style={styles.studentInfo}>
             <Text style={styles.infoText}>
@@ -459,9 +468,26 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#495057',
     lineHeight: 20,
+    marginBottom: 8,
+  },
+  destinationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f8f9fa',
+    padding: 10,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4361ee',
+  },
+  destinationText: {
+    fontSize: 14,
+    color: '#4361ee',
+    fontWeight: '600',
+    marginLeft: 8,
   },
   studentInfo: {
-    marginTop: 12,
+    marginTop: 8,
   },
   infoText: {
     fontSize: 13,

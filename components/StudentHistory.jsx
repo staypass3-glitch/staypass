@@ -1,3 +1,4 @@
+import { useAlert } from '@/context/AlertContext.js';
 import { Feather, Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import * as FileSystem from 'expo-file-system';
@@ -35,7 +36,7 @@ const StudentHistory = () => {
   const [menuVisible, setMenuVisible] = useState(false);
   const [latestIncompleteRequest, setLatestIncompleteRequest] = useState(null);
   const [excelGenerating, setExcelGenerating] = useState(false);
-
+  const {showAlert} = useAlert();
   const fetchStudentHistory = useCallback(async (studentId) => {
     try {
       setLoading(true);
@@ -45,6 +46,7 @@ const StudentHistory = () => {
         .select(`
           id,
           description,
+          destination,
           status,
           created_at,
           decided_at,
@@ -109,7 +111,7 @@ const StudentHistory = () => {
     // Close the menu first
     setMenuVisible(false);
     
-    Alert.alert(
+    showAlert(
       "Remove Student",
       `Are you sure you want to remove ${student.name} from this college? This action cannot be undone.`,
       [
@@ -172,6 +174,7 @@ const StudentHistory = () => {
         'Request Date': new Date(request.created_at).toLocaleDateString(),
         'Request Time': new Date(request.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}),
         'Description': request.description,
+        'Destination': request.destination || 'N/A',
         'Status': request.status.toUpperCase(),
         'Date to Go': new Date(request.date_to_go).toLocaleDateString(),
         'Date to Come': new Date(request.date_to_come).toLocaleDateString(),
@@ -198,11 +201,12 @@ const StudentHistory = () => {
 
       // Merge cells for better layout
       ws["!merges"] = [
-        { s: { r: 0, c: 0 }, e: { r: 0, c: 5 } },
-        { s: { r: 2, c: 0 }, e: { r: 2, c: 5 } },
-        { s: { r: 3, c: 0 }, e: { r: 3, c: 5 } },
-        { s: { r: 4, c: 0 }, e: { r: 4, c: 5 } },
-        { s: { r: 5, c: 0 }, e: { r: 5, c: 5 } }
+        { s: { r: 0, c: 0 }, e: { r: 0, c: 6 } },
+        { s: { r: 1, c: 0 }, e: { r: 1, c: 6 } },
+        { s: { r: 2, c: 0 }, e: { r: 2, c: 6 } },
+        { s: { r: 3, c: 0 }, e: { r: 3, c: 6 } },
+        { s: { r: 4, c: 0 }, e: { r: 4, c: 6 } },
+        { s: { r: 5, c: 0 }, e: { r: 5, c: 6 } }
       ];
 
       // Set column widths
@@ -211,6 +215,7 @@ const StudentHistory = () => {
         { wch: 15 }, // Request Date
         { wch: 12 }, // Request Time
         { wch: 30 }, // Description
+        { wch: 25 }, // Destination
         { wch: 12 }, // Status
         { wch: 15 }, // Date to Go
         { wch: 15 }, // Date to Come
@@ -310,6 +315,14 @@ const StudentHistory = () => {
       </View>
       
       <Text style={styles.historyDescription}>{item.description}</Text>
+      
+      {/* Destination Display */}
+      {item.destination && (
+        <View style={styles.destinationContainer}>
+          <Feather name="map-pin" size={14} color="#4361ee" />
+          <Text style={styles.destinationText}>{item.destination}</Text>
+        </View>
+      )}
       
       {/* Location Button - Only show for the latest incomplete request with coordinates */}
       {latestIncompleteRequest && latestIncompleteRequest.id === item.id && (
@@ -760,6 +773,24 @@ const styles = StyleSheet.create({
     color: '#333',
     marginBottom: 12,
     lineHeight: 20,
+  },
+  destinationContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f0f4ff',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    alignSelf: 'flex-start',
+    marginBottom: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#4361ee',
+  },
+  destinationText: {
+    fontSize: 14,
+    color: '#4361ee',
+    fontWeight: '600',
+    marginLeft: 8,
   },
   locationButton: {
     flexDirection: 'row',

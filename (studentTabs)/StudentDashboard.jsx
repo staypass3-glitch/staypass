@@ -25,7 +25,7 @@ import { useAuth } from '../context/AuthContext';
 import { supabase } from '../lib/supabase';
 
 // Constants - moved outside component
-const REJECTION_COOLDOWN = 30*60;
+const REJECTION_COOLDOWN = 30 * 60;
 
 const COLORS = {
   primary: '#2563eb',
@@ -60,6 +60,7 @@ const StudentDashboard = () => {
     loading1: false,
     error: null,
     description: '',
+    destination: '',
     collegeId: null,
     sessionId: '',
     adminId: '',
@@ -161,10 +162,16 @@ const StudentDashboard = () => {
   // Original submit request logic (now called after password verification)
   const submitRequestAfterPasswordVerification = useCallback(async () => {
     const trimmedDescription = state.description.trim();
+    const trimmedDestination = state.destination.trim();
     
     // Validation
     if (!trimmedDescription) {
       showAlert('Error', 'Please enter a description', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (!trimmedDestination) {
+      showAlert('Error', 'Please enter your destination', [{ text: 'OK' }]);
       return;
     }
 
@@ -180,7 +187,7 @@ const StudentDashboard = () => {
 
     if (state.lastRejectedAt) {
       const timeDifference = (Date.now() - new Date(state.lastRejectedAt).getTime()) / (1000 * 60 * 60);
-      if (timeDifference < 30) {
+      if (timeDifference < 0.5) { // 30 minutes in hours
         showAlert('Error', 'You can only submit a new request after 30 minutes from the last rejection.', [{ text: 'OK' }]);
         return;
       }
@@ -195,6 +202,7 @@ const StudentDashboard = () => {
           student_id: user.id,
           college_id: state.collegeId,
           description: trimmedDescription,
+          destination: trimmedDestination,
           date_to_go: state.dateToGo.toISOString().split('T')[0],
           date_to_come: state.dateToCome.toISOString().split('T')[0],
           session_id: state.sessionId,
@@ -207,6 +215,7 @@ const StudentDashboard = () => {
       showAlert('Success', 'Request submitted successfully', [{ text: 'OK' }]);
       updateState({ 
         description: '', 
+        destination: '',
         dateToGo: new Date(), 
         dateToCome: new Date(),
         loading: false 
@@ -217,15 +226,21 @@ const StudentDashboard = () => {
       showAlert('Error', error.message || 'Failed to submit request', [{ text: 'OK' }]);
       updateState({ loading: false });
     }
-  }, [state.description, state.dateToGo, state.dateToCome, state.collegeId, state.sessionId, state.adminId, state.lastRejectedAt, user?.id, fetchData, showAlert, updateState]);
+  }, [state.description, state.destination, state.dateToGo, state.dateToCome, state.collegeId, state.sessionId, state.adminId, state.lastRejectedAt, user?.id, fetchData, showAlert, updateState]);
 
   // Modified submit request function - now shows password modal
   const submitRequest = useCallback(() => {
     const trimmedDescription = state.description.trim();
+    const trimmedDestination = state.destination.trim();
     
     // Basic validation before showing password modal
     if (!trimmedDescription) {
       showAlert('Error', 'Please enter a description', [{ text: 'OK' }]);
+      return;
+    }
+
+    if (!trimmedDestination) {
+      showAlert('Error', 'Please enter your destination', [{ text: 'OK' }]);
       return;
     }
 
@@ -241,7 +256,7 @@ const StudentDashboard = () => {
 
     if (state.lastRejectedAt) {
       const timeDifference = (Date.now() - new Date(state.lastRejectedAt).getTime()) / (1000 * 60 * 60);
-      if (timeDifference < 30) {
+      if (timeDifference < 0.5) { // 30 minutes in hours
         showAlert('Error', 'You can only submit a new request after 30 minutes from the last rejection.', [{ text: 'OK' }]);
         return;
       }
@@ -249,7 +264,7 @@ const StudentDashboard = () => {
 
     // All validations passed, show password modal
     updateState({ showPasswordModal: true });
-  }, [state.description, state.dateToGo, state.dateToCome, state.collegeId, state.lastRejectedAt, showAlert, updateState]);
+  }, [state.description, state.destination, state.dateToGo, state.dateToCome, state.collegeId, state.lastRejectedAt, showAlert, updateState]);
 
   // QR Code generation - optimized
   const generateQRCode = useCallback((type, collegeId, sessionId) => {
@@ -643,6 +658,15 @@ const StudentDashboard = () => {
             onChangeText={(text) => updateState({ description: text })}
             multiline
           />
+          
+          <Text style={styles.label}>Destination</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter your destination"
+            placeholderTextColor="#9ca3af"
+            value={state.destination}
+            onChangeText={(text) => updateState({ destination: text })}
+          />
 
           <Text style={styles.label}>Date to Go</Text>
           <TouchableOpacity onPress={() => updateState({ showDatePickerGo: true })}>
@@ -676,7 +700,7 @@ const StudentDashboard = () => {
     }
 
     return null;
-  }, [state.requestStatus, state.timeRemaining, state.qrData, state.qrType, state.generatingQR, state.description, state.dateToGo, state.dateToCome, state.loading, qrFadeAnim, submitRequest, updateState, customLoading]);
+  }, [state.requestStatus, state.timeRemaining, state.qrData, state.qrType, state.generatingQR, state.description, state.destination, state.dateToGo, state.dateToCome, state.loading, qrFadeAnim, submitRequest, updateState, customLoading]);
 
   // Loading state
   if (!state.collegeId || state.loading1) {
@@ -775,7 +799,7 @@ const StudentDashboard = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    marginBottom:20,
+    marginBottom: 20,
   },
   centerContainer: {
     flex: 1,
@@ -826,7 +850,6 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 12,
     marginBottom: 20,
-    minHeight: 100,
     backgroundColor: theme.colors.lightBackground,
     fontSize: fonts.fontSizes.md,
     color: theme.colors.darkText,
@@ -1060,7 +1083,7 @@ const styles = StyleSheet.create({
     color: theme.colors.darkText,
     fontWeight: fonts.fontWeights.semibold,
     fontSize: fonts.fontSizes.md,
-    borderColor:'black',
+    borderColor: 'black',
   },
   submitButtonText: {
     color: 'white',

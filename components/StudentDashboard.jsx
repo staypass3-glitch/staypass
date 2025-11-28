@@ -1,12 +1,12 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { ScrollView, View, Text, Alert, ActivityIndicator, TextInput, StyleSheet, TouchableOpacity, Modal } from 'react-native';
-import DateTimePicker from "@react-native-community/datetimepicker";
-import { supabase } from '../lib/supabase';
-import { useAuth } from '../context/AuthContext';
-import QRCode from 'react-native-qrcode-svg';
-import { useNavigation } from 'expo-router';
-import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import DateTimePicker from "@react-native-community/datetimepicker";
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from 'expo-router';
+import React, { useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Modal, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import QRCode from 'react-native-qrcode-svg';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
@@ -15,6 +15,7 @@ const StudentDashboard = () => {
   const [error, setError] = useState(null);
   const navigation = useNavigation();
   const [description, setDescription] = useState('');
+  const [destination,setDestination] = useState('');
   const [collegeId, setCollegeId] = useState(null);
   const [sessionId, setSessionId] = useState('');
   const [adminId, setAdminId] = useState('');
@@ -455,7 +456,14 @@ const StudentDashboard = () => {
                 onChangeText={setDescription}
                 multiline
               />
-
+<Text style={styles.label}>Destination</Text>
+              <TextInput
+                style={styles.input}
+                placeholder="Enter Your Destination"
+                placeholderTextColor="#9ca3af"
+                value={destination}
+                onChangeText={setDestination}
+              />
               <Text style={styles.label}>Date to Go</Text>
               <TouchableOpacity onPress={() => setShowDatePickerGo(true)}>
                 <View style={styles.dateInput}>

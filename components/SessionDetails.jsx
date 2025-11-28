@@ -13,7 +13,9 @@ import {
   FlatList,
   KeyboardAvoidingView,
   Modal,
-  Platform, StyleSheet, Text,
+  Platform,
+  StyleSheet,
+  Text,
   TextInput,
   TouchableOpacity,
   View
@@ -26,13 +28,15 @@ import ScreenWrapper from './ScreenWrapper.jsx';
 const { width } = Dimensions.get('window');
 
 const SessionDetails = () => {
-  const {showAlert} = useAlert();
+  // Hooks
+  const { showAlert } = useAlert();
   const { user } = useAuth();
   const navigation = useNavigation();
   const route = useRoute();
   const { session } = route.params;
   const flatListRef = useRef(null);
   
+  // State
   const [currentQR, setCurrentQR] = useState(null);
   const [loading, setLoading] = useState(false);
   const [sessionData, setSessionData] = useState(session);
@@ -45,13 +49,21 @@ const SessionDetails = () => {
   const [verificationCode, setVerificationCode] = useState('');
   const [generatedCode, setGeneratedCode] = useState('');
   const [codeInput, setCodeInput] = useState('');
-  const [customIndicator,setCustomIndicator] = useState(false);
-  const [calendar,showCalendar] = useState(false);
-  const [dateFind,setDateFind] = useState(new Date());
-  const [dateInserted,setDateInserted] = useState(false);
+  const [customIndicator, setCustomIndicator] = useState(false);
+  const [calendar, showCalendar] = useState(false);
+  const [dateFind, setDateFind] = useState(new Date());
+  const [dateInserted, setDateInserted] = useState(false);
   const [fetchedRequests, setFetchedRequests] = useState([]);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
 
+  // Memoized values
+  const { today, minDate } = useMemo(() => {
+    const today = new Date();
+    const minDate = new Date(sessionData.start_time);
+    return { today, minDate };
+  }, [sessionData.start_time]);
+
+  // Effects
   useEffect(() => {
     if (session) {
       showSessionQR(session);
@@ -59,12 +71,30 @@ const SessionDetails = () => {
     }
   }, [session]);
 
+  useEffect(() => {
+    const filtered = filterStudents(searchQuery, students);
+    setFilteredStudents(filtered);
+  }, [searchQuery, students, filterStudents]);
+
+  // Helper functions
   const generateVerificationCode = () => {
     const code = Math.random().toString(36).substring(2, 8).toUpperCase();
     setGeneratedCode(code);
     return code;
   };
 
+  const filterStudents = useCallback((query, studentList) => {
+    if (query.trim() === '') {
+      return studentList;
+    }
+    return studentList.filter(student =>
+      student.name?.toLowerCase().includes(query.toLowerCase()) ||
+      student.email?.toLowerCase().includes(query.toLowerCase()) ||
+      student.phone_number?.includes(query)
+    );
+  }, []);
+
+  // Modal handlers
   const openDeleteModal = () => {
     const newCode = generateVerificationCode();
     setVerificationCode(newCode);
@@ -72,230 +102,16 @@ const SessionDetails = () => {
     setDeleteModalVisible(true);
   };
 
-  const {today,minDate} = useMemo(()=>{
-      const today = new Date();
-      const minDate = new Date(sessionData.start_time);
-
-      return {today,minDate};
-  },[])
-
   const closeDeleteModal = () => {
     setDeleteModalVisible(false);
     setCodeInput('');
   };
 
-  const handleDeleteSession = () => {
-    if (codeInput.trim().toUpperCase() === generatedCode) {
-      closeDeleteModal();
-      deleteSession();
-    } else {
-      Alert.alert('Invalid Code', 'Please enter the correct verification code.');
-    }
+  const clearSearch = () => {
+    setSearchQuery('');
   };
 
-  const deleteSession = async() => {
- try{   
-    console.log('deleting');
-    setCustomIndicator(true);
-   
-    const {error:collegeError} = await supabase
-    .from('colleges')
-    .delete()
-    .eq('id',session.college_id)
-
-    if (collegeError)  console.error(collegeError);
-
-
-      navigation.navigate('Admin');
-      Alert.alert('Session','Session deleted Successfully')
- }catch(error){
-        console.log('Error occoured');
- }
-finally{
-  setCustomIndicator(false);
-}
-
-  };
-
-  const filterStudents = useCallback((query, studentList) => {
-    if (query.trim() === '') {
-      return studentList;
-    } else {
-      return studentList.filter(student =>
-        student.name?.toLowerCase().includes(query.toLowerCase()) ||
-        student.email?.toLowerCase().includes(query.toLowerCase()) ||
-        student.phone_number?.includes(query)
-      );
-    }
-  }, []);
-
-  useEffect(() => {
-    const filtered = filterStudents(searchQuery, students);
-    setFilteredStudents(filtered);
-  }, [searchQuery, students, filterStudents]);
-
-  // Fetch requests for selected date
-  const fetchRequestsForDate = async (selectedDate) => {
-    try {
-      setDateInserted(true);
-      
-      // Format date to YYYY-MM-DD
-      const formattedDate = selectedDate.toISOString().split('T')[0];
-      
-      console.log(formattedDate);
-      
-      // Query using RPC or filter with proper date comparison
-      const { data, error } = await supabase
-        .from('requests')
-        .select(`
-          *,
-          student:profiles!requests_student_id_fkey(
-            id,
-            name,
-            phone_number,
-            room_number,
-            department
-          )
-        `)
-        .eq('college_id', session.college_id)
-        .or(`actual_scan_out.gte.${formattedDate}T00:00:00,actual_scan_in.gte.${formattedDate}T00:00:00`)
-        .or(`actual_scan_out.lte.${formattedDate}T23:59:59,actual_scan_in.lte.${formattedDate}T23:59:59`)
-        .order('created_at', { ascending: false });
-  
-      if (error) throw error;
-  
-      setDateInserted(false);
-  
-      if (data && data.length > 0) {
-        setFetchedRequests(data);
-        setShowDownloadModal(true);
-        showAlert(
-          'Data Found',
-          `Found ${data.length} request(s) for ${selectedDate.toLocaleDateString()}`,
-          [{ text: 'OK' }]
-        );
-      } else {
-        showAlert(
-          'No Data',
-          `No requests found for ${selectedDate.toLocaleDateString()}`,
-          [{ text: 'OK' }]
-      );
-      }
-    } catch (error) {
-      console.error('Error fetching requests:', error);
-      setDateInserted(false);
-      showAlert('Error', 'Failed to fetch data for the selected date');
-    }
-  };
-
-  // Generate CSV content
-  const generateCSV = (requests) => {
-    const headers = [
-      'Student Name',
-      'Phone Number',
-      'Room Number',
-      'Department',
-      'Type',
-      'Status',
-      'Date to Go',
-      'Date to Come',
-      'Description',
-      'Location',
-      'Created At',
-      'Actual Scan Out',
-      'Actual Scan In'
-    ];
-
-    const rows = requests.map(req => [
-      req.student?.name || 'N/A',
-      req.student?.phone_number || 'N/A',
-      req.student?.room_number || 'N/A',
-      req.student?.department || 'N/A',
-      req.type || 'N/A',
-      req.status || 'N/A',
-      req.date_to_go || 'N/A',
-      req.date_to_come || 'N/A',
-      req.description || 'N/A',
-      req.location || 'N/A',
-      req.created_at ? new Date(req.created_at).toLocaleString() : 'N/A',
-      req.actual_scan_out ? new Date(req.actual_scan_out).toLocaleString() : 'N/A',
-      req.actual_scan_in ? new Date(req.actual_scan_in).toLocaleString() : 'N/A'
-    ]);
-
-    const csvContent = [
-      headers.join(','),
-      ...rows.map(row => row.map(cell => `"${cell}"`).join(','))
-    ].join('\n');
-
-    return csvContent;
-  };
-
-  // Download Excel (CSV) file
-  const downloadExcel = async () => {
-    try {
-      setCustomIndicator(true);
-
-      const csvContent = generateCSV(fetchedRequests);
-      const fileName = `requests_${dateFind.toISOString().split('T')[0]}.csv`;
-      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
-
-      // Write CSV file
-      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
-        encoding: FileSystem.EncodingType.UTF8,
-      });
-
-      // Share the file
-      if (await Sharing.isAvailableAsync()) {
-        await Sharing.shareAsync(fileUri, {
-          mimeType: 'text/csv',
-          dialogTitle: 'Download Requests Data',
-          UTI: 'public.comma-separated-values-text'
-        });
-      } else {
-        Alert.alert('Success', `File saved at: ${fileUri}`);
-      }
-
-      setShowDownloadModal(false);
-      setCustomIndicator(false);
-    } catch (error) {
-      console.error('Error downloading Excel:', error);
-      setCustomIndicator(false);
-      Alert.alert('Error', 'Failed to download Excel file');
-    }
-  };
-
-  const datePicker = useMemo(()=>(
-    <>
-    { calendar && (
-      <DateTimePicker 
-      value={today}
-      mode="date"
-      display="default"
-      onChange={(event,selectedDate)=>{
-
-      if(event.type == "dismissed"){
-        showCalendar(false);
-        return;
-      }
-
-      if(selectedDate){
-        setDateFind(selectedDate)
-        showCalendar(false);
-        // Fetch data for selected date
-        fetchRequestsForDate(selectedDate);
-      }
-      else{
-        console.error('Error Occoured in selecting the date');
-      }
-      }}
-      minimumDate={minDate}
-      maximumDate={today}
-      />
-    )}
-
-    </>
-  ))
-
+  // API functions
   const showSessionQR = async (session) => {
     try {
       setLoading(true);
@@ -386,12 +202,197 @@ finally{
     }
   };
 
+  const fetchRequestsForDate = async (selectedDate) => {
+    try {
+      setDateInserted(true);
+      
+      const formattedDate = selectedDate.toISOString().split('T')[0];
+      
+      const { data, error } = await supabase
+        .from('requests')
+        .select(`
+          *,
+          student:profiles!requests_student_id_fkey(
+            id,
+            name,
+            phone_number,
+            room_number,
+            department
+          )
+        `)
+        .eq('college_id', session.college_id)
+        .or(`actual_scan_out.gte.${formattedDate}T00:00:00,actual_scan_in.gte.${formattedDate}T00:00:00`)
+        .or(`actual_scan_out.lte.${formattedDate}T23:59:59,actual_scan_in.lte.${formattedDate}T23:59:59`)
+        .order('created_at', { ascending: false });
+  
+      if (error) throw error;
+  
+      setDateInserted(false);
+  
+      if (data && data.length > 0) {
+        setFetchedRequests(data);
+        setShowDownloadModal(true);
+        showAlert(
+          'Data Found',
+          `Found ${data.length} request(s) for ${selectedDate.toLocaleDateString()}`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        showAlert(
+          'No Data',
+          `No requests found for ${selectedDate.toLocaleDateString()}`,
+          [{ text: 'OK' }]
+        );
+      }
+    } catch (error) {
+      console.error('Error fetching requests:', error);
+      setDateInserted(false);
+      showAlert('Error', 'Failed to fetch data for the selected date');
+    }
+  };
+
+  const deleteSession = async () => {
+    try {   
+      console.log('deleting');
+      setCustomIndicator(true);
+     
+      const { error: collegeError } = await supabase
+        .from('colleges')
+        .delete()
+        .eq('id', session.college_id)
+
+      if (collegeError) console.error(collegeError);
+
+      navigation.navigate('Admin');
+      Alert.alert('Session', 'Session deleted Successfully');
+    } catch (error) {
+      console.log('Error occurred');
+    } finally {
+      setCustomIndicator(false);
+    }
+  };
+
+  const handleDeleteSession = () => {
+    if (codeInput.trim().toUpperCase() === generatedCode) {
+      closeDeleteModal();
+      deleteSession();
+    } else {
+      Alert.alert('Invalid Code', 'Please enter the correct verification code.');
+    }
+  };
+
+  // CSV Generation with Destination
+  const generateCSV = (requests) => {
+    const headers = [
+      'Student Name',
+      'Phone Number',
+      'Room Number',
+      'Department',
+      'Type',
+      'Status',
+      'Destination', // Added destination field
+      'Date to Go',
+      'Date to Come',
+      'Description',
+      'Location',
+      'Created At',
+      'Actual Scan Out',
+      'Actual Scan In'
+    ];
+
+    const rows = requests.map(req => [
+      req.student?.name || 'N/A',
+      req.student?.phone_number || 'N/A',
+      req.student?.room_number || 'N/A',
+      req.student?.department || 'N/A',
+      req.type || 'N/A',
+      req.status || 'N/A',
+      req.destination || 'N/A', // Added destination data
+      req.date_to_go || 'N/A',
+      req.date_to_come || 'N/A',
+      req.description || 'N/A',
+      req.location || 'N/A',
+      req.created_at ? new Date(req.created_at).toLocaleString() : 'N/A',
+      req.actual_scan_out ? new Date(req.actual_scan_out).toLocaleString() : 'N/A',
+      req.actual_scan_in ? new Date(req.actual_scan_in).toLocaleString() : 'N/A'
+    ]);
+
+    const csvContent = [
+      headers.join(','),
+      ...rows.map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    ].join('\n');
+
+    return csvContent;
+  };
+
+  // Download Excel (CSV) file
+  const downloadExcel = async () => {
+    try {
+      setCustomIndicator(true);
+
+      const csvContent = generateCSV(fetchedRequests);
+      const fileName = `requests_${dateFind.toISOString().split('T')[0]}.csv`;
+      const fileUri = `${FileSystem.documentDirectory}${fileName}`;
+
+      await FileSystem.writeAsStringAsync(fileUri, csvContent, {
+        encoding: FileSystem.EncodingType.UTF8,
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(fileUri, {
+          mimeType: 'text/csv',
+          dialogTitle: 'Download Requests Data',
+          UTI: 'public.comma-separated-values-text'
+        });
+      } else {
+        Alert.alert('Success', `File saved at: ${fileUri}`);
+      }
+
+      setShowDownloadModal(false);
+      setCustomIndicator(false);
+    } catch (error) {
+      console.error('Error downloading Excel:', error);
+      setCustomIndicator(false);
+      Alert.alert('Error', 'Failed to download Excel file');
+    }
+  };
+
+  // Event handlers
   const handleStudentPress = (student) => {
     navigation.navigate('StudentHistory', { 
       student: student,
       collegeId: sessionData.college_id
     });
   };
+
+  const handleDateChange = (event, selectedDate) => {
+    if (event.type === "dismissed") {
+      showCalendar(false);
+      return;
+    }
+
+    if (selectedDate) {
+      setDateFind(selectedDate);
+      showCalendar(false);
+      fetchRequestsForDate(selectedDate);
+    } else {
+      console.error('Error occurred in selecting the date');
+    }
+  };
+
+  // Memoized components
+  const datePicker = useMemo(() => (
+    calendar && (
+      <DateTimePicker 
+        value={dateFind}
+        mode="date"
+        display="default"
+        onChange={handleDateChange}
+        minimumDate={minDate}
+        maximumDate={today}
+      />
+    )
+  ), [calendar, dateFind, minDate, today]);
 
   const renderStudentItem = ({ item, index }) => (
     <TouchableOpacity 
@@ -436,10 +437,7 @@ finally{
     </TouchableOpacity>
   );
 
-  const clearSearch = () => {
-    setSearchQuery('');
-  };
-
+  // Loading states
   if (!sessionData) {
     return (
       <View style={styles.centeredContainer}>
@@ -448,8 +446,8 @@ finally{
     );
   }
 
-  if(customIndicator){
-    return <CustomIndicator/>
+  if (customIndicator) {
+    return <CustomIndicator />;
   }
 
   return (
@@ -459,7 +457,7 @@ finally{
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 25}
       >
-        {/* Enhanced Header Section */}
+        {/* Header Section */}
         <View style={styles.headerSection}>
           <View style={styles.header}>
             <TouchableOpacity 
@@ -488,61 +486,7 @@ finally{
             </TouchableOpacity>
           </View>
 
-          {/* Loading Modal */}
-          <Modal
-            visible={dateInserted}
-            animationType="fade"
-            transparent={true}
-          >
-            <View style={styles.loadingModalOverlay}>
-              <View style={styles.loadingModalContent}>
-                <ActivityIndicator size="large" color="#3b82f6" />
-                <Text style={styles.loadingModalText}>
-                  Searching for date {dateFind.toLocaleDateString()}
-                </Text>
-              </View>
-            </View>
-          </Modal>
-
-          {/* Download Modal */}
-          <Modal
-            visible={showDownloadModal}
-            animationType="fade"
-            transparent={true}
-            onRequestClose={() => setShowDownloadModal(false)}
-          >
-            <View style={styles.modalOverlay}>
-              <View style={styles.downloadModalContainer}>
-                <View style={styles.downloadModalHeader}>
-                  <Ionicons name="document-text" size={32} color="#3b82f6" />
-                  <Text style={styles.downloadModalTitle}>Download Data</Text>
-                </View>
-                
-                <Text style={styles.downloadModalText}>
-                  Found {fetchedRequests.length} request(s) for {dateFind.toLocaleDateString()}
-                </Text>
-                
-                <View style={styles.downloadModalActions}>
-                  <TouchableOpacity 
-                    style={[styles.modalButton, styles.cancelButton]}
-                    onPress={() => setShowDownloadModal(false)}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                  
-                  <TouchableOpacity 
-                    style={[styles.modalButton, styles.downloadButton]}
-                    onPress={downloadExcel}
-                  >
-                    <Ionicons name="download-outline" size={18} color="#fff" />
-                    <Text style={styles.downloadButtonText}>Download Excel</Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-            </View>
-          </Modal>
-
-          {/* Enhanced Session Info Card */}
+          {/* Session Info Card */}
           {sessionInfoExpanded && (
             <View style={styles.sessionInfoCard}>
               <View style={styles.infoGrid}>
@@ -573,7 +517,7 @@ finally{
             </View>
           )}
 
-          {/* Enhanced Action Buttons */}
+          {/* Action Buttons */}
           <View style={styles.actionButtonsContainer}>
             <TouchableOpacity 
               style={[styles.actionButton, styles.credentialsButton]}
@@ -595,21 +539,21 @@ finally{
           {/* Download Data Button */}
           <View style={styles.downloadButtonContainer}>
             <TouchableOpacity 
-              style={[styles.actionButton, styles.credentialsButton]}
+              style={[styles.actionButton, styles.downloadDataButton]}
               onPress={() => showCalendar(true)}
             >
               <Ionicons name="cloud-download" size={18} color="#fff" />
-              <Text style={styles.actionButtonText}>Download Data</Text>
+              <Text style={styles.actionButtonText}>Download</Text>
             </TouchableOpacity>
           </View>
 
-          {/* Enhanced Search Section */}
+          {/* Search Section */}
           <View style={styles.searchSection}>
             <View style={styles.searchContainer}>
               <Ionicons name="search" size={18} color="#64748b" style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
-                placeholder="Search name"
+                placeholder="Search students..."
                 placeholderTextColor="#94a3b8"
                 value={searchQuery}
                 onChangeText={setSearchQuery}
@@ -624,7 +568,6 @@ finally{
               )}
             </View>
             
-            {/* Results Count */}
             <View style={styles.resultsContainer}>
               <Text style={styles.resultsText}>
                 Showing {filteredStudents.length} of {students.length} students
@@ -663,9 +606,61 @@ finally{
           }
         />
 
+        {/* Modals */}
         {datePicker}
 
-        {/* Enhanced Delete Confirmation Modal */}
+        <Modal
+          visible={dateInserted}
+          animationType="fade"
+          transparent={true}
+        >
+          <View style={styles.loadingModalOverlay}>
+            <View style={styles.loadingModalContent}>
+              <ActivityIndicator size="large" color="#3b82f6" />
+              <Text style={styles.loadingModalText}>
+                Searching for date {dateFind.toLocaleDateString()}
+              </Text>
+            </View>
+          </View>
+        </Modal>
+
+        <Modal
+          visible={showDownloadModal}
+          animationType="fade"
+          transparent={true}
+          onRequestClose={() => setShowDownloadModal(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.downloadModalContainer}>
+              <View style={styles.downloadModalHeader}>
+                <Ionicons name="document-text" size={32} color="#3b82f6" />
+                <Text style={styles.downloadModalTitle}>Download Data</Text>
+              </View>
+              
+              <Text style={styles.downloadModalText}>
+                Found {fetchedRequests.length} request(s) for {dateFind.toLocaleDateString()}
+              </Text>
+              
+              <View style={styles.downloadModalActions}>
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setShowDownloadModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>Cancel</Text>
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.downloadButton]}
+                  onPress={downloadExcel}
+                >
+                  <Ionicons name="download-outline" size={18} color="#fff" />
+                  <Text style={styles.downloadButtonText}>Download</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
         <Modal
           animationType="fade"
           transparent={true}
@@ -679,7 +674,7 @@ finally{
                   <Ionicons name="warning" size={24} color="#dc2626" />
                 </View>
                 <View style={styles.modalTitleContainer}>
-                  <Text style={styles.modalTitle}>Delete</Text>
+                  <Text style={styles.modalTitle}>Delete Session</Text>
                   <Text style={styles.modalSubtitle}>This action cannot be undone</Text>
                 </View>
                 <TouchableOpacity onPress={closeDeleteModal} style={styles.closeButton}>
@@ -732,7 +727,7 @@ finally{
                     onPress={handleDeleteSession}
                     disabled={!codeInput.trim()}
                   >
-                    <Text style={styles.confirmDeleteButtonText}>Delete</Text>
+                    <Text style={styles.confirmDeleteButtonText}>Delete Session</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -760,7 +755,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 20,
     paddingTop: 16,
-    paddingBottom: 0,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
     shadowColor: '#000',
@@ -782,7 +777,6 @@ const styles = StyleSheet.create({
   },
   headerTitleContainer: {
     flex: 1,
-    marginTop:'9%'
   },
   title: {
     fontSize: 24,
@@ -833,12 +827,10 @@ const styles = StyleSheet.create({
   actionButtonsContainer: {
     flexDirection: 'row',
     gap: 12,
-    marginBottom: 16,
-    marginTop:'7%'
+    marginBottom: 12,
   },
   downloadButtonContainer: {
     marginBottom: 16,
-    height:'15%'
   },
   actionButton: {
     flex: 1,
@@ -861,84 +853,19 @@ const styles = StyleSheet.create({
   deleteButton: {
     backgroundColor: '#dc2626',
   },
+  downloadDataButton: {
+    backgroundColor: '#10b981',
+    paddingVertical:20,
+    flex:0
+  },
   actionButtonText: {
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
   },
-  // Loading Modal
-  loadingModalOverlay: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-  },
-  loadingModalContent: {
-    backgroundColor: '#fff',
-    padding: 24,
-    borderRadius: 16,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-    minWidth: 250,
-  },
-  loadingModalText: {
-    marginTop: 16,
-    fontSize: 15,
-    color: '#475569',
-    textAlign: 'center',
-  },
-  // Download Modal
-  downloadModalContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 24,
-    width: '90%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  downloadModalHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  downloadModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginTop: 12,
-  },
-  downloadModalText: {
-    fontSize: 15,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  downloadModalActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  downloadButton: {
-    backgroundColor: '#10b981',
-    flexDirection: 'row',
-    gap: 6,
-  },
-  downloadButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-  },
   // Search Section
   searchSection: {
     gap: 8,
-    marginTop:'5%'
   },
   searchContainer: {
     flexDirection: 'row',
@@ -1173,7 +1100,6 @@ const styles = StyleSheet.create({
   modalActions: {
     flexDirection: 'row',
     gap: 12,
-    marginTop:'9%'
   },
   modalButton: {
     flex: 1,
@@ -1195,6 +1121,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
+  downloadButton: {
+    backgroundColor: '#10b981',
+    flexDirection: 'row',
+    gap: 6,
+  },
   disabledButton: {
     opacity: 0.5,
   },
@@ -1208,5 +1139,70 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
   },
+  downloadButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Loading Modal
+  loadingModalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  loadingModalContent: {
+    backgroundColor: '#fff',
+    padding: 24,
+    borderRadius: 16,
+    alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
+    elevation: 5,
+    minWidth: 250,
+  },
+  loadingModalText: {
+    marginTop: 16,
+    fontSize: 15,
+    color: '#475569',
+    textAlign: 'center',
+  },
+  // Download Modal
+  downloadModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 30,
+    width: '90%',
+    maxWidth: 400,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 10,
+  },
+  downloadModalHeader: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  downloadModalTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginTop: 12,
+  },
+  downloadModalText: {
+    fontSize: 15,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 24,
+    lineHeight: 22,
+  },
+  downloadModalActions: {
+    flexDirection: 'row',
+    gap: 12,
+  },
 });
+
 export default SessionDetails;

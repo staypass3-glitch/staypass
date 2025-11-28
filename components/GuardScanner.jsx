@@ -22,7 +22,6 @@ import CustomAlert from './CustomAlert';
 import CustomIndicator from './CustomIndicator';
 import CustomLoadingScreen from './CustomLoadingScreen.jsx';
 import ScreenWrapper from './ScreenWrapper';
-
 // Constants
 const LOGOUT_DELAY = 2000;
 const CAMERA_HEIGHT = 400;
@@ -124,7 +123,6 @@ const GuardScanner = () => {
   // Refs to prevent multiple simultaneous scans
   const scanningRef = useRef(false);
   const logoutTimerRef = useRef(null);
-
   const t = translations[language];
 
   const showAlert = useCallback((title,message,buttons=[])=>{

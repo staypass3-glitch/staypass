@@ -23,14 +23,19 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/logo.png",
-        "backgroundColor": "#ffffff",
-        "permissions": [
-          "CAMERA"
-        ]
+        "backgroundColor": "#ffffff"
       },
+      "permissions": [
+        "CAMERA"
+      ],
       "edgeToEdgeEnabled": true,
       "package": "com.guru333.StayPass",
-      "googleServicesFile": "./google-services.json"
+      "googleServicesFile": "./google-services.json",
+      "notification": {
+        "icon": "./assets/images/logo.png",
+        "defaultSound": true,
+        "sound": "./assets/sounds/custom_noti.mp3"
+      }
     },
     "web": {
       "bundler": "metro",
@@ -49,7 +54,14 @@
         }
       ],
       "expo-web-browser",
-      "expo-mail-composer"
+      "expo-mail-composer",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/images/logo.png",
+          "sounds": ["./assets/sounds/custom_noti.mp3"]
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true
