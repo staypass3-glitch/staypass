@@ -11,7 +11,6 @@ import {
   Modal,
   RefreshControl,
   SafeAreaView,
-  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -31,14 +30,12 @@ const PendingApproval = () => {
   const [selectedImage, setSelectedImage] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [alert, setAlert] = useState({visible: false, title: '', message: '', buttons: []});
-  const [processingRequests, setProcessingRequests] = useState({}); // Track loading state for each request
-  
+  const [processingRequests, setProcessingRequests] = useState({});
 
   const showAlert = useCallback((title, message, buttons = []) => {
     setAlert({visible: true, title, message, buttons});
   }, []);
 
-  // Memoize fetchPendingRequests function
   const fetchPendingRequests = useCallback(async () => {
     try {
       setLoading(true);
@@ -48,7 +45,6 @@ const PendingApproval = () => {
         .from('requests')
         .select(`
           id,
-          session_id,
           status,
           created_at,
           student_id,
@@ -76,7 +72,6 @@ const PendingApproval = () => {
     fetchPendingRequests();
   }, [fetchPendingRequests]);
 
-  // Memoize utility functions
   const formatDate = useCallback((dateString) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
@@ -94,7 +89,6 @@ const PendingApproval = () => {
 
   const handleApprove = useCallback(async (requestId) => {
     try {
-      // Set loading state for this specific request
       setProcessingRequests(prev => ({ ...prev, [requestId]: 'approving' }));
       
       const { error } = await supabase
@@ -113,7 +107,6 @@ const PendingApproval = () => {
       console.error("Error approving request:", error);
       Alert.alert('Error', error.message);
     } finally {
-      // Clear loading state for this request
       setProcessingRequests(prev => {
         const newState = { ...prev };
         delete newState[requestId];
@@ -124,7 +117,6 @@ const PendingApproval = () => {
 
   const handleReject = useCallback(async (requestId) => {
     try {
-      // Set loading state for this specific request
       setProcessingRequests(prev => ({ ...prev, [requestId]: 'rejecting' }));
       
       const { error } = await supabase
@@ -143,7 +135,6 @@ const PendingApproval = () => {
       console.error("Error rejecting request:", error);
       Alert.alert('Error', error.message);
     } finally {
-      // Clear loading state for this request
       setProcessingRequests(prev => {
         const newState = { ...prev };
         delete newState[requestId];
@@ -152,7 +143,6 @@ const PendingApproval = () => {
     }
   }, [fetchPendingRequests, showAlert]);
 
-  // Memoize render item function
   const renderRequestItem = useCallback(({ item }) => {
     const student = item.profiles;
     const isProcessing = processingRequests[item.id];
@@ -168,7 +158,7 @@ const PendingApproval = () => {
       >
         <View style={styles.requestHeader}>
           <View style={styles.profileContainer}>
-            {student.profile_image ? (
+            {student?.profile_image ? (
               <TouchableOpacity 
                 onPress={() => {
                   setSelectedImage(student.profile_image);
@@ -185,8 +175,10 @@ const PendingApproval = () => {
                 <MaterialIcons name="person" size={28} color="#6c757d" />
               </View>
             )}
-            <View>
-              <Text style={styles.studentName}>{student.name}</Text>
+            <View style={styles.nameContainer}>
+              <Text style={styles.studentName} numberOfLines={2}>
+                {student?.name || 'Unknown Student'}
+              </Text>
               <Text style={styles.timestamp}>
                 <Feather name="clock" size={12} color="#6c757d" /> {formatDate(item.created_at)}
               </Text>
@@ -197,24 +189,25 @@ const PendingApproval = () => {
         <View style={styles.requestContent}>
           <Text style={styles.description}>{item.description}</Text>
           
-          {/* Destination Display */}
           {item.destination && (
             <View style={styles.destinationContainer}>
               <Feather name="map-pin" size={14} color="#4361ee" />
-              <Text style={styles.destinationText}>{item.destination}</Text>
+              <Text style={styles.destinationText} numberOfLines={2}>
+                {item.destination}
+              </Text>
             </View>
           )}
           
           <View style={styles.studentInfo}>
             <Text style={styles.infoText}>
-              <Feather name="phone" size={12} color="#6c757d" /> {student.phone_number}
+              <Feather name="phone" size={12} color="#6c757d" /> {student?.phone_number || 'N/A'}
             </Text>
-            {student.room_number && (
+            {student?.room_number && (
               <Text style={styles.infoText}>
                 <Feather name="home" size={12} color="#6c757d" /> Room {student.room_number}
               </Text>
             )}
-            {student.department && (
+            {student?.department && (
               <Text style={styles.infoText}>
                 <Feather name="briefcase" size={12} color="#6c757d" /> {student.department}
               </Text>
@@ -273,10 +266,8 @@ const PendingApproval = () => {
     );
   }, [formatDate, handleApprove, handleReject, processingRequests]);
 
-  // Memoize key extractor
   const keyExtractor = useCallback((item) => item.id.toString(), []);
 
-  // Memoize empty component
   const EmptyComponent = useMemo(() => (
     <View style={styles.emptyContainer}>
       <Feather name="inbox" size={48} color="#adb5bd" />
@@ -285,7 +276,6 @@ const PendingApproval = () => {
     </View>
   ), []);
 
-  // Memoize refresh control
   const refreshControl = useMemo(() => (
     <RefreshControl
       refreshing={refreshing}
@@ -297,8 +287,8 @@ const PendingApproval = () => {
 
   return (
     <ScreenWrapper>
+      {/* StatusBar should be at the very top */}
       <LinearGradient colors={['#f8f9fa', '#e9ecef']} style={styles.safeArea}>
-        <StatusBar barStyle="dark-content" backgroundColor="#f8f9fa" />
         <SafeAreaView style={styles.container}>
           <View style={styles.header}>
             <TouchableOpacity 
@@ -307,7 +297,9 @@ const PendingApproval = () => {
             >
               <Ionicons name="arrow-back" size={24} color="#4361ee" />
             </TouchableOpacity>
-            <Text style={styles.title}>Pending Approvals</Text>
+            <Text style={styles.title} numberOfLines={1}>
+              Pending Approvals
+            </Text>
             <TouchableOpacity 
               style={styles.refreshButton}
               onPress={onRefresh}
@@ -335,11 +327,6 @@ const PendingApproval = () => {
               initialNumToRender={10}
               maxToRenderPerBatch={10}
               windowSize={10}
-              getItemLayout={(data, index) => ({
-                length: 200,
-                offset: 200 * index,
-                index,
-              })}
             />
           )}
 
@@ -386,26 +373,32 @@ const styles = StyleSheet.create({
   },
   container: {
     flex: 1,
-    padding: 16,
-    backgroundColor:'#fff'
+    paddingTop: 8, // Reduced top padding to account for StatusBar
+    paddingHorizontal: 16,
+    backgroundColor:'#fff',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 24,
-    paddingBottom: 16,
+    marginBottom: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#dee2e6',
   },
   title: {
-    fontSize: 28,
+    fontSize: 20, // Reduced size for better fit
     fontWeight: '700',
     color: '#212529',
-    fontFamily: 'HelveticaNeue-Bold',
     flex: 1,
     textAlign: 'center',
-    marginHorizontal: 16,
+    marginHorizontal: 8,
+    paddingHorizontal: 4,
+  },
+  backButton: {
+    padding: 4,
+    minWidth: 40,
+    alignItems: 'center',
   },
   refreshButton: {
     width: 40,
@@ -415,47 +408,46 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#e9ecef',
   },
-  backButton: {
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
   listContent: {
     paddingBottom: 20,
   },
   requestItem: {
     backgroundColor: '#fff',
     borderRadius: 16,
-    padding: 20,
+    padding: 16, // Reduced padding for better fit
     marginBottom: 16,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 5,
+    borderColor:'#c7d7d9',
+    borderWidth:1,
   },
   requestHeader: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   profileContainer: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   profileImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    marginRight: 16,
+    width: 50, // Reduced size for better fit
+    height: 50,
+    borderRadius: 25,
+    marginRight: 12,
     backgroundColor: '#e9ecef',
   },
   defaultProfile: {
     justifyContent: 'center',
     alignItems: 'center',
   },
+  nameContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    minHeight: 50,
+  },
   studentName: {
-    fontSize: 18,
+    fontSize: 16, // Reduced size
     fontWeight: '600',
     color: '#212529',
-    marginBottom: 4,
+    flexShrink: 1,
+    marginBottom: 2,
   },
   timestamp: {
     fontSize: 12,
@@ -485,6 +477,8 @@ const styles = StyleSheet.create({
     color: '#4361ee',
     fontWeight: '600',
     marginLeft: 8,
+    flex: 1,
+    flexWrap: 'wrap',
   },
   studentInfo: {
     marginTop: 8,
@@ -502,7 +496,7 @@ const styles = StyleSheet.create({
   actionButton: {
     flex: 1,
     flexDirection: 'row',
-    paddingVertical: 12,
+    paddingVertical: 10,
     borderRadius: 10,
     justifyContent: 'center',
     alignItems: 'center',
@@ -525,32 +519,35 @@ const styles = StyleSheet.create({
   approveButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 15,
-    marginLeft: 8,
+    fontSize: 14,
+    marginLeft: 6,
   },
   rejectButtonText: {
     color: '#fff',
     fontWeight: '600',
-    fontSize: 15,
-    marginLeft: 8,
+    fontSize: 14,
+    marginLeft: 6,
   },
   loaderContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    paddingTop: 40,
   },
   loadingText: {
-    marginTop: 16,
+    marginTop: 12,
     color: '#6c757d',
-    fontSize: 16,
+    fontSize: 14,
   },
   emptyContainer: {
+    flex: 1,
     padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    minHeight: 300,
   },
   emptyText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '500',
     color: '#6c757d',
     marginTop: 16,
@@ -560,30 +557,15 @@ const styles = StyleSheet.create({
     color: '#adb5bd',
     marginTop: 4,
   },
-  modalContainer: {
+  modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0,0,0,0.9)',
     justifyContent: 'center',
     alignItems: 'center',
   },
   modalImage: {
-    width: windowWidth,
-    height: windowHeight * 0.8,
-  },
-  modalCloseButton: {
-    position: 'absolute',
-    top: 40,
-    right: 20,
-    zIndex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    borderRadius: 20,
-    padding: 10,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.9)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    width: windowWidth * 0.9,
+    height: windowHeight * 0.7,
   },
 });
 

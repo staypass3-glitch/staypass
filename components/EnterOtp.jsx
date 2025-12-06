@@ -44,7 +44,7 @@ const EnterOtp = () => {
   }, []);
 
   useEffect(() => {
-    // Timer for resend OTP
+    
     let interval;
     if (resendTimer > 0) {
       interval = setInterval(() => {
@@ -69,12 +69,11 @@ const EnterOtp = () => {
       inputRefs.current[index + 1]?.focus();
     }
     
-    // Auto-verify when all digits are entered
+    
     if (newOtp.every(digit => digit !== '') && newOtp.join('').length === 6) {
       verifyOTP(newOtp.join(''));
     }
   };
-
 
 // Also update your verifyOTP function to handle the image upload better:
 const verifyOTP = async (otpCode) => {

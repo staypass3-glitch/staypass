@@ -37,7 +37,7 @@ const MemoizedCustomInput = React.memo(CustomInput);
 const MemoizedMaterialIcons = React.memo(MaterialIcons);
 
 const AdminProfile = () => {
-  const { user } = useAuth();
+  const { user,refreshUserData } = useAuth();
   const [name, setName] = useState(user?.name || '');
   const [gmail, setGmail] = useState(user?.email || '');
   const [roomNumber, setRoomNumber] = useState(user?.roomNumber || '');
@@ -229,6 +229,8 @@ const AdminProfile = () => {
       }
 
       showAlert('Success', ERROR_MESSAGES.PROFILE_UPDATE_SUCCESS, [{ text: 'Ok' }]);
+
+      await refreshUserData();
     } catch (error) {
       console.error('Profile update error:', error);
       showAlert('Update Failed', error.message || ERROR_MESSAGES.PROFILE_UPDATE_FAILED, [{ text: 'Ok' }]);

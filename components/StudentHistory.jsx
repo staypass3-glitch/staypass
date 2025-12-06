@@ -601,7 +601,7 @@ const StudentHistory = () => {
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: '#f8f9fa',
+    backgroundColor: '#fff',
   },
   headerContainer: {
     flexDirection: 'row',
@@ -613,7 +613,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e9ecef',
   },
   backButton: {
-    marginRight: 16,
+    padding: 6,
+    marginRight: '7%',
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
   },
   headerContent: {
     flex: 1,
@@ -730,11 +733,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 4,
-    elevation: 1,
+    borderColor:'#c7d7d9',
+    borderWidth:1,
   },
   historyHeader: {
     flexDirection: 'row',

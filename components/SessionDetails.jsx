@@ -8,7 +8,6 @@ import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   FlatList,
   KeyboardAvoidingView,
@@ -35,6 +34,7 @@ const SessionDetails = () => {
   const route = useRoute();
   const { session } = route.params;
   const flatListRef = useRef(null);
+  const {setAlert} = useAlert();
   
   // State
   const [currentQR, setCurrentQR] = useState(null);
@@ -55,6 +55,7 @@ const SessionDetails = () => {
   const [dateInserted, setDateInserted] = useState(false);
   const [fetchedRequests, setFetchedRequests] = useState([]);
   const [showDownloadModal, setShowDownloadModal] = useState(false);
+  const [isMainAdmin, setIsMainAdmin] = useState(false);
 
   // Memoized values
   const { today, minDate } = useMemo(() => {
@@ -68,8 +69,9 @@ const SessionDetails = () => {
     if (session) {
       showSessionQR(session);
       fetchSessionStudents(session.id);
+      checkIfMainAdmin(session.id);
     }
-  }, [session]);
+  }, [session, user]);
 
   useEffect(() => {
     const filtered = filterStudents(searchQuery, students);
@@ -93,6 +95,31 @@ const SessionDetails = () => {
       student.phone_number?.includes(query)
     );
   }, []);
+
+  // Check if current user is the main admin of this session
+  const checkIfMainAdmin = async (sessionId) => {
+    try {
+      setCustomIndicator(true);
+      const { data: sessionData, error } = await supabase
+        .from('sessions')
+        .select('admin_id, mainAdmin')
+        .eq('id', sessionId)
+        .single();
+
+      if (error) throw error;
+
+      if (sessionData && sessionData.admin_id === user.id && sessionData.mainAdmin === true) {
+        setIsMainAdmin(true);
+      } else {
+        setIsMainAdmin(false);
+      }
+      setCustomIndicator(false);
+    } catch (error) {
+      console.error("Error checking admin status:", error);
+      setIsMainAdmin(false);
+      setCustomIndicator(false);
+    }
+  };
 
   // Modal handlers
   const openDeleteModal = () => {
@@ -156,8 +183,8 @@ const SessionDetails = () => {
       setSessionData(session);
       
     } catch (error) {
-      console.error("Error showing session QR:", error);
-      Alert.alert('Error', error.message);
+      console.error("Error showing session Qr:", error);
+      showAlert('Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -196,7 +223,7 @@ const SessionDetails = () => {
       setFilteredStudents(data || []);
     } catch (error) {
       console.error("Error fetching session students:", error);
-      Alert.alert('Error', 'Failed to fetch students');
+      showAlert('Error', 'Failed to fetch students');
     } finally {
       setLoadingStudents(false);
     }
@@ -262,9 +289,8 @@ const SessionDetails = () => {
         .eq('id', session.college_id)
 
       if (collegeError) console.error(collegeError);
-
       navigation.navigate('Admin');
-      Alert.alert('Session', 'Session deleted Successfully');
+      showAlert('Session', 'Session deleted Successfully');
     } catch (error) {
       console.log('Error occurred');
     } finally {
@@ -277,7 +303,7 @@ const SessionDetails = () => {
       closeDeleteModal();
       deleteSession();
     } else {
-      Alert.alert('Invalid Code', 'Please enter the correct verification code.');
+      showAlert('Invalid Code', 'Please enter the correct verification code.');
     }
   };
 
@@ -290,7 +316,7 @@ const SessionDetails = () => {
       'Department',
       'Type',
       'Status',
-      'Destination', // Added destination field
+      'Destination',
       'Date to Go',
       'Date to Come',
       'Description',
@@ -307,7 +333,7 @@ const SessionDetails = () => {
       req.student?.department || 'N/A',
       req.type || 'N/A',
       req.status || 'N/A',
-      req.destination || 'N/A', // Added destination data
+      req.destination || 'N/A',
       req.date_to_go || 'N/A',
       req.date_to_come || 'N/A',
       req.description || 'N/A',
@@ -345,7 +371,7 @@ const SessionDetails = () => {
           UTI: 'public.comma-separated-values-text'
         });
       } else {
-        Alert.alert('Success', `File saved at: ${fileUri}`);
+        showAlert('Success', `File saved at: ${fileUri}`);
       }
 
       setShowDownloadModal(false);
@@ -353,7 +379,7 @@ const SessionDetails = () => {
     } catch (error) {
       console.error('Error downloading Excel:', error);
       setCustomIndicator(false);
-      Alert.alert('Error', 'Failed to download Excel file');
+      showAlert('Error', 'Failed to download Excel file');
     }
   };
 
@@ -464,7 +490,7 @@ const SessionDetails = () => {
               onPress={() => navigation.goBack()} 
               style={styles.backButton}
             >
-              <Ionicons name="arrow-back" size={24} color={COLORS.primary} />
+              <Ionicons name="arrow-back" size={25} color={COLORS.primary} />
             </TouchableOpacity>
             
             <View style={styles.headerTitleContainer}>
@@ -480,7 +506,7 @@ const SessionDetails = () => {
             >
               <Ionicons 
                 name={sessionInfoExpanded ? "chevron-up" : "information-circle-outline"} 
-                size={24} 
+                size={25} 
                 color="#3b82f6" 
               />
             </TouchableOpacity>
@@ -491,7 +517,7 @@ const SessionDetails = () => {
             <View style={styles.sessionInfoCard}>
               <View style={styles.infoGrid}>
                 <View style={styles.infoItem}>
-                  <Ionicons name="calendar-outline" size={16} color="#3b82f6" />
+                  <Ionicons name="calendar-outline" size={14} color="#3b82f6" />
                   <Text style={styles.infoLabel}>Date</Text>
                   <Text style={styles.infoValue}>
                     {new Date(sessionData.start_time).toLocaleDateString()}
@@ -499,7 +525,7 @@ const SessionDetails = () => {
                 </View>
                
                 <View style={styles.infoItem}>
-                  <Ionicons name="time-outline" size={16} color="#3b82f6" />
+                  <Ionicons name="time-outline" size={14} color="#3b82f6" />
                   <Text style={styles.infoLabel}>Time</Text>
                   <Text style={styles.infoValue}>
                     {new Date(sessionData.start_time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -507,7 +533,7 @@ const SessionDetails = () => {
                 </View>
                 
                 <View style={styles.infoItem}>
-                  <Ionicons name="school-outline" size={16} color="#3b82f6" />
+                  <Ionicons name="school-outline" size={14} color="#3b82f6" />
                   <Text style={styles.infoLabel}>College</Text>
                   <Text style={styles.infoValue} numberOfLines={1}>
                     {sessionData?.colleges?.name || 'Unknown'}
@@ -523,7 +549,7 @@ const SessionDetails = () => {
               style={[styles.actionButton, styles.credentialsButton]}
               onPress={() => navigation.navigate('ShowCredentials', { sessionId: session?.id })}
             >
-              <Ionicons name="key-outline" size={18} color="#fff" />
+              <Ionicons name="key-outline" size={16} color="#fff" />
               <Text style={styles.actionButtonText}>Credentials</Text>
             </TouchableOpacity>
 
@@ -531,26 +557,39 @@ const SessionDetails = () => {
               style={[styles.actionButton, styles.deleteButton]}
               onPress={openDeleteModal}
             >
-              <Ionicons name="trash-outline" size={18} color="#fff" />
+              <Ionicons name="trash-outline" size={16} color="#fff" />
               <Text style={styles.actionButtonText}>Delete</Text>
             </TouchableOpacity>
           </View>
 
           {/* Download Data Button */}
-          <View style={styles.downloadButtonContainer}>
+          <View style={styles.downloadSection}>
             <TouchableOpacity 
               style={[styles.actionButton, styles.downloadDataButton]}
               onPress={() => showCalendar(true)}
             >
-              <Ionicons name="cloud-download" size={18} color="#fff" />
-              <Text style={styles.actionButtonText}>Download</Text>
+              <Ionicons name="cloud-download" size={16} color="#fff" />
+              <Text style={styles.downloadButtonText}>Download Data</Text>
             </TouchableOpacity>
+            
+            {/* Conditionally render Admins button only for main admin */}
+            {isMainAdmin && (
+              <TouchableOpacity 
+                style={[styles.actionButton, styles.showAdminsButton]}
+                onPress={() => {
+                  navigation.navigate('AllAdmins',{collegeId:sessionData.college_id});
+                }}
+              >
+                <Ionicons name="people" size={16} color="#fff" />
+                <Text style={styles.downloadButtonText}>Admins</Text>
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Search Section */}
           <View style={styles.searchSection}>
             <View style={styles.searchContainer}>
-              <Ionicons name="search" size={18} color="#64748b" style={styles.searchIcon} />
+              <Ionicons name="search" size={16} color="#64748b" style={styles.searchIcon} />
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search students..."
@@ -563,7 +602,7 @@ const SessionDetails = () => {
               />
               {searchQuery.length > 0 && (
                 <TouchableOpacity onPress={clearSearch} style={styles.clearButton}>
-                  <Ionicons name="close-circle" size={18} color="#64748b" />
+                  <Ionicons name="close-circle" size={16} color="#64748b" />
                 </TouchableOpacity>
               )}
             </View>
@@ -653,7 +692,7 @@ const SessionDetails = () => {
                   style={[styles.modalButton, styles.downloadButton]}
                   onPress={downloadExcel}
                 >
-                  <Ionicons name="download-outline" size={18} color="#fff" />
+                  <Ionicons name="download-outline" size={16} color="#fff" />
                   <Text style={styles.downloadButtonText}>Download</Text>
                 </TouchableOpacity>
               </View>
@@ -671,14 +710,14 @@ const SessionDetails = () => {
             <View style={styles.modalContainer}>
               <View style={styles.modalHeader}>
                 <View style={styles.modalIcon}>
-                  <Ionicons name="warning" size={24} color="#dc2626" />
+                  <Ionicons name="warning" size={20} color="#dc2626" />
                 </View>
                 <View style={styles.modalTitleContainer}>
                   <Text style={styles.modalTitle}>Delete Session</Text>
                   <Text style={styles.modalSubtitle}>This action cannot be undone</Text>
                 </View>
                 <TouchableOpacity onPress={closeDeleteModal} style={styles.closeButton}>
-                  <Ionicons name="close" size={20} color="#64748b" />
+                  <Ionicons name="close" size={18} color="#64748b" />
                 </TouchableOpacity>
               </View>
               
@@ -742,36 +781,32 @@ const SessionDetails = () => {
 const styles = StyleSheet.create({
   mainContainer: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#fff',
   },
   centeredContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#fff',
   },
   // Header Section
   headerSection: {
     backgroundColor: '#fff',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 12,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 2,
   },
   header: {
+    marginTop:20,
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   backButton: {
-    padding: 8,
-    marginRight: 12,
+    padding: 6,
+    marginRight: '7%',
     backgroundColor: '#f8fafc',
     borderRadius: 8,
   },
@@ -779,32 +814,32 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '700',
     color: '#1e293b',
     marginBottom: 2,
   },
   subtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748b',
     fontWeight: '500',
   },
   infoToggle: {
-    padding: 8,
+    padding: 6,
     backgroundColor: '#f8fafc',
     borderRadius: 8,
   },
   // Session Info Card
   sessionInfoCard: {
     backgroundColor: '#f8fafc',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 14,
-    borderLeftWidth: 4,
+    borderRadius: 10,
+    padding: 14,
+    marginBottom: 12,
+    borderLeftWidth: 3,
     borderLeftColor: '#3b82f6',
   },
   infoGrid: {
-    gap: 12,
+    gap: 10,
   },
   infoItem: {
     flexDirection: 'row',
@@ -818,7 +853,7 @@ const styles = StyleSheet.create({
     width: 50,
   },
   infoValue: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#1e293b',
     fontWeight: '500',
     flex: 1,
@@ -826,41 +861,51 @@ const styles = StyleSheet.create({
   // Action Buttons
   actionButtonsContainer: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
+    marginBottom: 10,
+  },
+  downloadSection: {
+    flexDirection: 'row',
+    gap: 10,
     marginBottom: 12,
   },
-  downloadButtonContainer: {
-    marginBottom: 16,
-  },
   actionButton: {
-    flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    borderRadius: 10,
+    gap: 6,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
+    shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    shadowRadius: 2,
+    elevation: 2,
   },
   credentialsButton: {
+    flex: 1,
     backgroundColor: '#3b82f6',
   },
   deleteButton: {
+    flex: 1,
     backgroundColor: '#dc2626',
   },
   downloadDataButton: {
-    backgroundColor: '#10b981',
-    paddingVertical:20,
-    flex:0
+    flex: 1,
+    backgroundColor: '#3b82f6',
+  },
+  showAdminsButton: {
+    backgroundColor: '#3b82f6',
   },
   actionButtonText: {
     color: '#fff',
-    fontSize: 15,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  downloadButtonText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
   },
   // Search Section
@@ -871,24 +916,19 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    paddingHorizontal: 16,
+    borderRadius: 10,
+    paddingHorizontal: 14,
     borderWidth: 1,
     borderColor: '#e2e8f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
   },
   searchIcon: {
-    marginRight: 12,
+    marginRight: 10,
   },
   searchInput: {
     flex: 1,
-    fontSize: 16,
+    fontSize: 14,
     color: '#1e293b',
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   clearButton: {
     padding: 4,
@@ -899,33 +939,28 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   resultsText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748b',
     fontWeight: '500',
   },
   loadingIndicator: {
-    marginLeft: 8,
+    marginLeft: 6,
   },
   // Student List
   flatListContent: {
-    paddingHorizontal: 20,
-    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     paddingBottom: 20,
   },
   studentCard: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
-    borderRadius: 12,
-    padding: 16,
+    borderRadius: 10,
+    padding: 12,
     marginBottom: 8,
     borderWidth: 1,
     borderColor: '#f1f5f9',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.05,
-    shadowRadius: 3,
-    elevation: 1,
   },
   firstStudentCard: {
     marginTop: 0,
@@ -934,9 +969,9 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   studentAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#3b82f6',
     justifyContent: 'center',
     alignItems: 'center',
@@ -944,7 +979,7 @@ const styles = StyleSheet.create({
   },
   avatarText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   studentContent: {
@@ -954,10 +989,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 6,
+    marginBottom: 4,
   },
   studentName: {
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
     color: '#1e293b',
     flex: 1,
@@ -972,31 +1007,31 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   detailText: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#64748b',
   },
   // Empty State
   emptyState: {
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 80,
+    paddingVertical: 60,
     paddingHorizontal: 40,
   },
   emptyStateIcon: {
-    marginBottom: 16,
+    marginBottom: 12,
   },
   emptyStateTitle: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: '#475569',
     textAlign: 'center',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   emptyStateSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#94a3b8',
     textAlign: 'center',
-    lineHeight: 20,
+    lineHeight: 18,
   },
   // Modal Styles
   modalOverlay: {
@@ -1008,28 +1043,23 @@ const styles = StyleSheet.create({
   },
   modalContainer: {
     backgroundColor: '#fff',
-    borderRadius: 16,
+    borderRadius: 14,
     width: '100%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
+    maxWidth: 380,
     overflow: 'hidden',
   },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 24,
+    padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#f1f5f9',
     backgroundColor: '#fef2f2',
   },
   modalIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#fecaca',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1039,72 +1069,72 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   modalTitle: {
-    fontSize: 20,
+    fontSize: 18,
     fontWeight: '700',
     color: '#dc2626',
     marginBottom: 2,
   },
   modalSubtitle: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#ef4444',
   },
   closeButton: {
     padding: 4,
   },
   modalContent: {
-    padding: 24,
+    padding: 20,
   },
   modalText: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#475569',
     textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
+    marginBottom: 20,
+    lineHeight: 20,
   },
   verificationSection: {
-    marginBottom: 20,
+    marginBottom: 16,
   },
   verificationLabel: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#64748b',
     textAlign: 'center',
-    marginBottom: 12,
+    marginBottom: 10,
     fontWeight: '500',
   },
   verificationCodeContainer: {
     backgroundColor: '#f8fafc',
-    padding: 16,
+    padding: 14,
     borderRadius: 8,
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
     borderStyle: 'dashed',
   },
   verificationCode: {
-    fontSize: 28,
+    fontSize: 24,
     fontWeight: '700',
     color: '#1e293b',
     textAlign: 'center',
-    letterSpacing: 3,
+    letterSpacing: 2,
   },
   codeInput: {
-    borderWidth: 2,
+    borderWidth: 1,
     borderColor: '#e2e8f0',
-    borderRadius: 12,
-    padding: 16,
-    fontSize: 18,
+    borderRadius: 10,
+    padding: 12,
+    fontSize: 16,
     fontWeight: '600',
-    marginBottom: 24,
+    marginBottom: 20,
     backgroundColor: '#f8fafc',
     color: '#1e293b',
   },
   modalActions: {
     flexDirection: 'row',
-    gap: 12,
+    gap: 10,
   },
   modalButton: {
     flex: 1,
-    padding: 16,
-    borderRadius: 12,
+    padding: 12,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -1115,11 +1145,6 @@ const styles = StyleSheet.create({
   },
   confirmDeleteButton: {
     backgroundColor: '#dc2626',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   downloadButton: {
     backgroundColor: '#10b981',
@@ -1131,18 +1156,42 @@ const styles = StyleSheet.create({
   },
   cancelButtonText: {
     color: '#64748b',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
   confirmDeleteButtonText: {
     color: '#fff',
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
-  downloadButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
+  // Download Modal
+  downloadModalContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 14,
+    padding: 24,
+    width: '90%',
+    maxWidth: 380,
+  },
+  downloadModalHeader: {
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  downloadModalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1e293b',
+    marginTop: 10,
+  },
+  downloadModalText: {
+    fontSize: 14,
+    color: '#64748b',
+    textAlign: 'center',
+    marginBottom: 20,
+    lineHeight: 20,
+  },
+  downloadModalActions: {
+    flexDirection: 'row',
+    gap: 10,
   },
   // Loading Modal
   loadingModalOverlay: {
@@ -1153,55 +1202,16 @@ const styles = StyleSheet.create({
   },
   loadingModalContent: {
     backgroundColor: '#fff',
-    padding: 24,
-    borderRadius: 16,
+    padding: 20,
+    borderRadius: 14,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 5,
-    minWidth: 250,
+    minWidth: 220,
   },
   loadingModalText: {
-    marginTop: 16,
-    fontSize: 15,
+    marginTop: 12,
+    fontSize: 14,
     color: '#475569',
     textAlign: 'center',
-  },
-  // Download Modal
-  downloadModalContainer: {
-    backgroundColor: '#fff',
-    borderRadius: 16,
-    padding: 30,
-    width: '90%',
-    maxWidth: 400,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.2,
-    shadowRadius: 16,
-    elevation: 10,
-  },
-  downloadModalHeader: {
-    alignItems: 'center',
-    marginBottom: 20,
-  },
-  downloadModalTitle: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#1e293b',
-    marginTop: 12,
-  },
-  downloadModalText: {
-    fontSize: 15,
-    color: '#64748b',
-    textAlign: 'center',
-    marginBottom: 24,
-    lineHeight: 22,
-  },
-  downloadModalActions: {
-    flexDirection: 'row',
-    gap: 12,
   },
 });
 

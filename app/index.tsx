@@ -1,15 +1,14 @@
-import { AppNavigator } from '@/components';
-import { AuthProvider } from '@/context/AuthContext';
-import { UserProvider } from '@/context/UserContext';
-import React from 'react';
-const Index = () => {
-  return (
-    <AuthProvider>
-      <UserProvider>
-          <AppNavigator />
-      </UserProvider>
-    </AuthProvider>
-  );
-};
+import AppNavigator from '@/components/AppNavigator'
+import { AuthProvider } from '@/context/AuthContext'
+import React from 'react'
 
-export default Index;
+const index = () => {
+  return (
+    
+    <AuthProvider>
+      <AppNavigator/>
+    </AuthProvider>
+  )
+}
+
+export default index

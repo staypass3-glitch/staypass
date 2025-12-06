@@ -22,7 +22,7 @@ const SignInScreen = () => {
   const {signIn} = useAuth();
   const navigation = useNavigation();
   const [credentials, setCredentials] = useState({
-    email: '',
+    phone: '',
     password: '',
   });
   const [loading, setLoading] = useState(false);
@@ -55,16 +55,46 @@ const SignInScreen = () => {
     ]).start();
   }, []);
 
+  // Function to clean phone number
+  const cleanPhoneNumber = (phone) => {
+    return phone.replace(/\D/g, '').slice(0, 10);
+  };
+
+  // Function to get full phone number with country code
+  const getFullPhoneNumber = () => {
+    const cleaned = cleanPhoneNumber(credentials.phone);
+    if (cleaned.length === 10) {
+      return `+91${cleaned}`;
+    }
+    return null;
+  };
+
+  const handlePhoneChange = (text) => {
+    const cleaned = cleanPhoneNumber(text);
+    setCredentials({ ...credentials, phone: cleaned });
+  };
+
   const handleSignIn = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
 
-      if (!credentials.email || !credentials.password) {
+      if (!credentials.phone || !credentials.password) {
         throw new Error('Please fill in all fields');
       }
 
-     await signIn(credentials.email,credentials.password)
+      // Validate phone number
+      const cleanedPhone = cleanPhoneNumber(credentials.phone);
+      if (cleanedPhone.length !== 10) {
+        throw new Error('Please enter a valid 10-digit phone number');
+      }
+
+      const fullPhoneNumber = getFullPhoneNumber();
+      if (!fullPhoneNumber) {
+        throw new Error('Invalid phone number format');
+      }
+
+      await signIn(fullPhoneNumber, credentials.password);
 
       // Get user profile after successful login
       const { data: profile, error: profileError } = await supabase
@@ -98,10 +128,10 @@ const SignInScreen = () => {
           throw new Error('Invalid user role');
       }
     } catch (error) {
-     
-        // Haptic feedback for error
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      
+      // Haptic feedback for error
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      // You might want to show an alert with the error message
+      // Alert.alert('Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -144,20 +174,26 @@ const SignInScreen = () => {
 
           <View style={styles.formContainer}>
             <View style={styles.inputContainer}>
-              <MaterialIcons name="email" size={22} color="#000" style={styles.icon} />
-              <TextInput
-                placeholder="Email Address"
-                value={credentials.email}
-                onChangeText={(text) => setCredentials({ ...credentials, email: text })}
-                keyboardType="email-address"
-                autoCapitalize="none"
-                style={styles.input}
-                placeholderTextColor="#999"
-              />
+              <MaterialIcons name="phone" size={20} color="#666" style={styles.icon} />
+              <View style={styles.phoneInputContainer}>
+                <View style={styles.countryCode}>
+                  <Text style={styles.countryCodeText}>+91</Text>
+                </View>
+                <TextInput
+                  placeholder="10-digit phone number"
+                  value={credentials.phone}
+                  onChangeText={handlePhoneChange}
+                  keyboardType="phone-pad"
+                  autoCapitalize="none"
+                  style={styles.phoneInput}
+                  placeholderTextColor="#999"
+                  maxLength={10}
+                />
+              </View>
             </View>
 
             <View style={styles.inputContainer}>
-              <MaterialIcons name="lock" size={22} color="#000" style={styles.icon} />
+              <MaterialIcons name="lock" size={20} color="#666" style={styles.icon} />
               <TextInput
                 placeholder="Password"
                 value={credentials.password}
@@ -169,7 +205,7 @@ const SignInScreen = () => {
               <TouchableOpacity onPress={togglePasswordVisibility} style={styles.eyeIcon}>
                 <MaterialIcons 
                   name={!secureTextEntry ? "visibility" : "visibility-off"} 
-                  size={22} 
+                  size={20} 
                   color="#999" 
                 />
               </TouchableOpacity>
@@ -274,50 +310,73 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
-    borderColor: '#eee',
+    borderColor: '#e0e0e0',
     borderWidth: 1,
-    borderRadius: 15,
-    paddingHorizontal: 20,
-    height: 60,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 56,
     backgroundColor: '#f8f9fa',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 2,
+  },
+  phoneInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countryCode: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  countryCodeText: {
+    color: '#666',
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  phoneInput: {
+    flex: 1,
+    height: 50,
+    color: '#333',
+    fontSize: 16,
+    paddingVertical: 0,
   },
   icon: {
-    marginRight: 15,
+    marginRight: 12,
   },
   eyeIcon: {
-    padding: 10,
+    padding: 8,
   },
   input: {
     flex: 1,
     height: 50,
     color: '#333',
     fontSize: 16,
+    paddingVertical: 0,
   },
   forgotPassword: {
     alignSelf: 'flex-end',
     marginBottom: 20,
   },
   forgotPasswordText: {
-    color: '#000',
+    color: '#4158D0',
     fontSize: 14,
+    fontWeight: '500',
   },
   button: {
     flexDirection: 'row',
     backgroundColor: '#4158D0',
-    paddingVertical: 15,
-    borderRadius: 15,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#4158D0',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowRadius: 8,
+    elevation: 6,
   },
   buttonDisabled: {
     backgroundColor: '#a0a0a0',
@@ -325,8 +384,8 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 18,
+    fontWeight: '600',
+    fontSize: 16,
   },
   buttonIcon: {
     marginLeft: 8,
@@ -337,39 +396,13 @@ const styles = StyleSheet.create({
     marginTop: 30,
   },
   signupText: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#666',
   },
   signupLink: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#4158D0',
-    fontWeight: 'bold',
-  },
-  socialContainer: {
-    marginTop: 30,
-    alignItems: 'center',
-  },
-  orText: {
-    color: '#999',
-    marginBottom: 15,
-  },
-  socialButtons: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  socialButton: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginHorizontal: 10,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-    elevation: 4,
+    fontWeight: '600',
   },
 });
 

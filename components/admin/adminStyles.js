@@ -11,7 +11,7 @@ export const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 30,
+    padding:10,
   },
   modalOverlay: {
     flex: 1,
@@ -48,7 +48,7 @@ export const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 20,
-    paddingTop: 40,
+    paddingTop: 10,
     backgroundColor: '#fff',
     borderBottomWidth: 1,
     borderBottomColor: '#e9ecef',
@@ -129,6 +129,8 @@ export const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: '600',
     color: '#333',
+    flexWrap:'wrap',
+    flexShrink:1
   },
   formSubtitle: {
     fontSize: 14,

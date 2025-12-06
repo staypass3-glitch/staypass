@@ -302,22 +302,24 @@ const Profile = () => {
     },
     // Improved header container with better alignment
     headerContainer: {
-      flexDirection: 'row',
-      justifyContent: 'space-between',
-      alignItems: 'flex-start',
-      paddingHorizontal: 8,
+      justifyContent: 'center',
+      alignItems: 'center',
+      flexDirection:'row',
       paddingTop: 20,
       marginBottom: 32,
     },
     headerTextContainer: {
       flex: 1,
-      alignItems: 'flex-start',
-      marginRight: 16,
+      alignItems: 'center',
+      
     },
     settingsButton: {
       padding: 8,
-      marginTop: 4, // Align with the first line of text
+    marginRight: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
     },
+    
     headerTitle: {
       fontSize: fonts.fontSizes.xl,
       fontWeight: fonts.fontWeights.bold,
@@ -530,24 +532,33 @@ const Profile = () => {
           <View style={styles.container}>
             {/* Header Section with Settings Button - Improved Alignment */}
             <View style={styles.headerContainer}>
-              <View style={styles.headerTextContainer}>
-                <Text style={styles.headerTitle}>Edit Profile</Text>
-         
-              </View>
-              <TouchableOpacity 
-                style={styles.settingsButton}
-                onPress={handleSettingsPress}
-                disabled={isLoading}
-                activeOpacity={0.7}
-              >
-                <MemoizedMaterialIcons 
-                  name="settings" 
-                  size={24} 
-                  color={theme.colors.primary} 
-                />
-              </TouchableOpacity>
-            </View>
+  
+  {/* Empty spacer (left side) */}
+  <View style={{ width: 30 }} />
 
+  {/* Center Title */}
+  <View style={styles.headerTextContainer}>
+    <Text style={styles.headerTitle}>Edit Profile</Text>
+  </View>
+
+  {/* Settings button (right corner) */}
+  <TouchableOpacity 
+    style={styles.settingsButton}
+    onPress={handleSettingsPress}
+    disabled={isLoading}
+    activeOpacity={0.7}
+  >
+    <MemoizedMaterialIcons 
+      name="settings" 
+      size={24} 
+      color={theme.colors.primary} 
+    />
+  </TouchableOpacity>
+
+</View>
+
+       
+  
             {/* Profile Image Section */}
             <View style={styles.profileImageSection}>
               <TouchableOpacity 

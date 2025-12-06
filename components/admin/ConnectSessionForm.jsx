@@ -1,14 +1,14 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect } from 'react';
 import {
-    ActivityIndicator,
-    BackHandler,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  BackHandler,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import ScreenWrapper from '../common/ScreenWrapper';
+import ScreenWrapper from '../ScreenWrapper';
 import { styles } from './adminStyles';
 
 const ConnectSessionForm = ({ onBack, onSubmit, loading, sessionId, setSessionId }) => {

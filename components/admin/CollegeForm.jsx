@@ -1,14 +1,15 @@
+import { useAlert } from '@/context/AlertContext';
 import { Ionicons } from '@expo/vector-icons';
 import React, { useEffect } from 'react';
 import {
-    ActivityIndicator,
-    BackHandler,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  BackHandler,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
-import ScreenWrapper from '../common/ScreenWrapper';
+import ScreenWrapper from '../ScreenWrapper';
 import { styles } from './adminStyles';
 
 const CollegeForm = ({ onBack, onSubmit, loading, collegeName, setCollegeName }) => {
@@ -21,7 +22,7 @@ const CollegeForm = ({ onBack, onSubmit, loading, collegeName, setCollegeName })
     const backHandler = BackHandler.addEventListener('hardwareBackPress', backAction);
     return () => backHandler.remove();
   }, [onBack]);
-  
+  const {showAlert} = useAlert();
   return (
     <ScreenWrapper style={styles.formContainer}>
       <View style={styles.formHeader}>

@@ -8,12 +8,15 @@ import LoadingScreen from './LoadingScreen.jsx';
 // Screens
 import StudentTabsNavigator from '@/(studentTabs)/StudentTabsNavigator.jsx';
 import AdminDashboard from './admin/AdminDashboard.jsx';
+import AllAdmins from './admin/AllAdmins.jsx';
 import PendingApproval from './admin/PendingApproval.jsx';
 import AdminAllSettings from './adminSettings/AdminAllSettings.jsx';
 import AdminProfile from './adminSettings/AdminProfile.jsx';
 import ChangePassword from './ChangePassword.jsx';
 import CustomIndicator from './CustomIndicator.jsx';
 import EnterOtp from './EnterOtp.jsx';
+import Feedback from './Feedback.jsx';
+import ForgotChangePass from './ForgotChangePass.jsx';
 import ForgotPassword from './ForgotPassword.jsx';
 import GuardScanner from './GuardScanner.jsx';
 import ReachedHomeScreen from './ReachedHomeScreen.jsx';
@@ -89,7 +92,9 @@ export default function AppNavigator() {
               <Stack.Screen name="ChangePassword" component={ChangePassword} />
               <Stack.Screen name="AllSettings" component={AllSettings} />
               <Stack.Screen name="AboutUs" component={AboutUs} />
-            
+              <Stack.Screen name="ForgotChangePass" component={ForgotChangePass} />
+              <Stack.Screen name="Feedback" component={Feedback} />
+
             </>
           )}
           {user.role === 'admin' && (
@@ -104,6 +109,7 @@ export default function AppNavigator() {
               <Stack.Screen name="AdminProfile" component={AdminProfile}/>
               <Stack.Screen name="AboutUs" component={AboutUs} />
               <Stack.Screen name="ChangePassword" component={ChangePassword} />
+              <Stack.Screen name="AllAdmins" component={AllAdmins} />
             </>
           )}
           {user.role === 'guard' && (

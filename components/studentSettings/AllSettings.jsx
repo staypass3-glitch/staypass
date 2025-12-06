@@ -157,6 +157,16 @@ const AllSettings = () => {
     navigation.navigate('AboutUs');
   }, [navigation, isBlockingOperation]);
 
+  const forgot  = useCallback(()=>{
+    if(isBlockingOperation) return;
+    navigation.navigate('ForgotChangePass')
+  },[navigation,isBlockingOperation]);
+
+  const handleFeedback  = useCallback(()=>{
+    if(isBlockingOperation) return;
+    navigation.navigate('Feedback')
+  },[navigation,isBlockingOperation]);
+
   const handleChangePassword = useCallback(() => {
     if (isBlockingOperation) return;
     navigation.navigate('ChangePassword'); 
@@ -312,14 +322,14 @@ const AllSettings = () => {
       id: 'forgotPassword',
       title: 'Forgot Password',
       icon: 'password',
-      onPress: '',
+      onPress: forgot,
       iconColor: theme.colors.primary,
     },
     {
       id: 'feedback',
       title: 'Feedback',
       icon: 'feedback',
-      onPress: handleAboutUs,
+      onPress: handleFeedback,
       iconColor: theme.colors.primary,
     },
     {
@@ -340,6 +350,8 @@ const AllSettings = () => {
       loading: logoutLoading,
     },
   ];
+
+
 
   const renderMenuItemContent = (item) => {
     if (item.loading) {

@@ -158,6 +158,43 @@ const GuardScanner = () => {
     loadLanguage();
   }, [user?.id]);
 
+  async function notifyStudentOfScan(studentId) {
+    const { data, error } = await supabase
+      .from("user_push_tokens")
+      .select("expo_push_token")
+      .eq("user_id", studentId)
+      .maybeSingle();
+  
+      console.log('expo push token is ', data.expo_push_token);
+
+    if (error) {
+      console.log("Error fetching token:", error);
+      return;
+    }
+  
+    if (!data?.expo_push_token) {
+      console.log("Student push token not found");
+      return;
+    }
+
+    await fetch("https://exp.host/--/api/v2/push/send", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        to: data.expo_push_token,
+        title: "Scan Successful",
+        body: "Your QR code was scanned.",
+        data: { refresh: true },  
+        priority:"high",
+      }),
+    });
+  
+    console.log("Push sent to student:", studentId);
+  }
+  
+
   const fetchGuardDetails = useCallback(async () => {
     if (!user?.id) return;
 
@@ -331,6 +368,7 @@ const GuardScanner = () => {
         if (returnError) throw returnError;
       }
 
+      await notifyStudentOfScan(student_id);
       setStudentDetails({ ...student, type });
       Alert.alert('Success', `Student ${type} recorded successfully!`);
     } catch (error) {

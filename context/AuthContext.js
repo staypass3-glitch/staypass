@@ -222,7 +222,7 @@ export const AuthProvider = ({ children }) => {
 
   const fetchUserProfile = async (authUser) => {
     try {
-      console.log(' Fetching user profile for:', authUser.email);
+      console.log(' Fetching user profile for:', authUser.phone);
       
       const { data: profile, error } = await supabase
         .from('profiles')
@@ -236,7 +236,8 @@ export const AuthProvider = ({ children }) => {
           phone_number,
           room_number,
           parent_phone,
-          current_session_id
+          current_session_id,
+          email
         `)
         .eq('id', authUser.id)
         .single();
@@ -245,7 +246,7 @@ export const AuthProvider = ({ children }) => {
 
       const userData = {
         id: authUser.id,
-        email: authUser.email,
+        email: profile.email,
         role: profile.role,
         collegeId: profile.college_id,
         sessionId: profile.current_session_id,
@@ -287,14 +288,14 @@ export const AuthProvider = ({ children }) => {
   };
 
 
-  const signIn = useCallback(async (email, password) => {
+  const signIn = useCallback(async (phone, password) => {
     setIsLoadingAuth(true);
     try {
    let existingDeviceId = null;
       const { data: existingSessions, error: sessionError } = await supabase
         .from('active_sessions')
         .select('*')
-        .eq('email', email);
+        .eq('phone', phone);
   
       if (sessionError) {
         console.error('Error checking active sessions:', sessionError.message);
@@ -309,7 +310,6 @@ export const AuthProvider = ({ children }) => {
       }
     }
 
-
       if (existingSessions && existingSessions.length > 0 && (existingSessions[0]?.device_id!=existingDeviceId)) {
         showAlert(
           'Already Logged In',
@@ -322,7 +322,7 @@ export const AuthProvider = ({ children }) => {
   
 
       const { data, error } = await supabase.auth.signInWithPassword({
-        email,
+        phone,
         password,
       });
   
@@ -345,7 +345,7 @@ export const AuthProvider = ({ children }) => {
   
         await supabase.from('active_sessions').insert({
           user_id: data.user.id,
-          email,
+          phone,
           session_id: data.session.id,
           device_id: deviceId,
           created_at: new Date(),
@@ -386,7 +386,7 @@ export const AuthProvider = ({ children }) => {
   
 
       const { data: { user }, error: authError } = await supabase.auth.signUp({
-        email: formData.email,
+        phone: formData.phone,
         password: formData.password,
         options: {
           data: {
@@ -404,6 +404,7 @@ export const AuthProvider = ({ children }) => {
           role: formData.role,
           name: formData.name,
           phone_number: formData.phone,
+          email:formData.email,
           room_number: formData.role === 'student' ? formData.roomNumber : null,
           department: (formData.role === 'admin' || formData.role === 'student') ? formData.department : null,
           shift_schedule: formData.role === 'guard' ? formData.shift : null,

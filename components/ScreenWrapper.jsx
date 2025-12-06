@@ -42,7 +42,7 @@ const ScreenWrapper = ({
           flex: 1, 
           backgroundColor: bg, 
           marginTop: paddingTop,
-          paddingHorizontal: theme.spacing.md,
+          paddingHorizontal: theme.spacing.sm,
         },
         haveTabs && { marginBottom: theme.responsive.tabBar.height },
         style

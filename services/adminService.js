@@ -64,6 +64,7 @@ export const adminService = {
         college_id: collegeId,
         start_time: new Date(),
         status: 'active',
+        mainAdmin:true,
       }])
       .select()
       .single();
@@ -98,7 +99,7 @@ export const adminService = {
     return { data, error };
   },
 
-  // Upsert QR code
+
   upsertQRCode: async (sessionId, collegeId, qrData) => {
     const { error } = await supabase
       .from('qrcodes')
@@ -122,13 +123,12 @@ export const adminService = {
     .select('*')
     .eq('college_id',collegeId)
     .eq('status','pending')
-    .single()
 
-    if(data) return true;
+    if(data.length > 0) return true;
     else false;
   },
 
-  // Deactivate session
+  
   deactivateSession: async (sessionId) => {
     const { error } = await supabase
       .from('sessions')

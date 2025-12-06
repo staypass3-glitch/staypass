@@ -5,6 +5,7 @@ import theme from '@/constants/theme';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from "@react-native-community/datetimepicker";
 import { LinearGradient } from 'expo-linear-gradient';
+import * as Notifications from "expo-notifications";
 import { useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -85,7 +86,7 @@ const StudentDashboard = () => {
     password: '',
     verifyingPassword: false,
   });
-
+  const [notificationTrigger, setNotificationTrigger] = useState(0);
   const [customAlert, setCustomAlert] = useState({ 
     visible: false, 
     title: '', 
@@ -106,6 +107,8 @@ const StudentDashboard = () => {
     return { today, maxDate };
   }, []);
 
+
+  
   // Optimized state updater
   const updateState = useCallback((updates) => {
     if (isMountedRef.current) {
@@ -122,16 +125,16 @@ const StudentDashboard = () => {
   const verifyPassword = useCallback(async (password) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({
-        email: user.email,
+        phone: user.phone_number,
         password: password,
       });
       
-      return !error; // Return true if no error (password is correct)
+      return !error; 
     } catch (error) {
       console.error('Error verifying password:', error);
       return false;
     }
-  }, [user?.email]);
+  }, [user?.phone]);
 
   // Handle password submission
   const handlePasswordSubmit = useCallback(async () => {
@@ -159,6 +162,7 @@ const StudentDashboard = () => {
     }
   }, [state.password, verifyPassword, showAlert, updateState]);
 
+  
   // Original submit request logic (now called after password verification)
   const submitRequestAfterPasswordVerification = useCallback(async () => {
     const trimmedDescription = state.description.trim();
@@ -205,7 +209,6 @@ const StudentDashboard = () => {
           destination: trimmedDestination,
           date_to_go: state.dateToGo.toISOString().split('T')[0],
           date_to_come: state.dateToCome.toISOString().split('T')[0],
-          session_id: state.sessionId,
           admin_id: state.adminId,
           status: 'pending',
         }]);
@@ -272,7 +275,6 @@ const StudentDashboard = () => {
       const qrData = {
         type,
         college_id: collegeId,
-        session_id: sessionId,
         student_id: user.id,
         timestamp: new Date().toISOString()
       };
@@ -390,7 +392,43 @@ const StudentDashboard = () => {
     }
   }, [user?.id, fetchData]);
 
-  // Focus listener to refresh data when returning to screen
+
+
+
+useEffect(() => {
+  console.log('Setting up notification listeners');
+  
+  const receivedListener = Notifications.addNotificationReceivedListener((notification) => {
+    console.log('Notification received:', notification);
+    if (notification.request.content.data?.refresh) {
+      console.log('Triggering refresh from notification');
+      setNotificationTrigger(prev => prev + 1);
+    }
+  });
+
+  const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
+    console.log('Notification tapped:', response);
+    if (response.notification.request.content.data?.refresh) {
+      console.log('Triggering refresh from tapped notification');
+      setNotificationTrigger(prev => prev + 1);
+    }
+  });
+
+  return () => {
+    console.log('Cleaning up notification listeners');
+    receivedListener.remove();
+    responseListener.remove();
+  };
+}, []); 
+
+// Trigger fetchData when notification comes
+useEffect(() => {
+  if (user?.id && notificationTrigger > 0) {
+    console.log('Fetching data due to notification');
+    fetchData();
+  }
+}, [notificationTrigger, user?.id, fetchData]);
+
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {
       // Refresh data when screen comes into focus
@@ -400,7 +438,7 @@ const StudentDashboard = () => {
     return unsubscribe;
   }, [navigation, fetchData]);
 
-  // Cleanup on unmount
+  
   useEffect(() => {
     return () => {
       isMountedRef.current = false;

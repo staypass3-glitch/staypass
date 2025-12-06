@@ -1,66 +1,80 @@
+import { useAlert } from '@/context/AlertContext';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
-import { Clipboard } from 'react-native';
-
+import { useRoute } from '@react-navigation/native';
 import { useNavigation } from 'expo-router';
 import React, { useEffect, useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-// If not using Expo, use: import Clipboard from '@react-native-clipboard/clipboard'
-import { useRoute } from '@react-navigation/native';
+import { Clipboard, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import ScreenWrapper from './ScreenWrapper';
 
 const ShowCredentials = () => {
-  const { user } = useAuth()
+  const { user } = useAuth();
   const route = useRoute();
-  const [credentials, setCredentials] = useState({ guard_id: '', session_id: '' })
-  const [loading, setLoading] = useState(true)
-  const navigation = useNavigation()
-  const { sessionId } = route.params;
+  const [credentials, setCredentials] = useState({ guard_id: '', session_id: '' });
+  const [loading, setLoading] = useState(true);
+  const navigation = useNavigation();
+  const {showAlert} = useAlert();
+
+  // Safely extract sessionId from route params
+  const sessionId = route.params?.sessionId;
 
   useEffect(() => {
     const fetchData = async () => {
+      if (!sessionId) {
+        showAlert('Error', 'Session ID not provided');
+        setLoading(false);
+        return;
+      }
+
       try {
-        setLoading(true)
+        setLoading(true);
         const { data: userData, error: userError } = await supabase
           .from('sessions')
           .select('guard_id, session_id')
           .eq('id', sessionId)
-          .single()
+          .single();
 
-        if (userError) throw userError
+        if (userError) throw userError;
 
         if (userData) {
           setCredentials({
             guard_id: userData.guard_id || '',
             session_id: userData.session_id || ''
-          })
+          });
         }
       } catch (error) {
-        console.error('Error fetching credentials:', error)
-        Alert.alert('Error', 'Failed to fetch credentials')
+        console.error('Error fetching credentials:', error);
+        showAlert('Error', 'Failed to fetch credentials');
       } finally {
-        setLoading(false)
+        setLoading(false);
       }
-    }
+    };
 
-    if (user?.id) {
-      fetchData()
+    if (user?.id && sessionId) {
+      fetchData();
+    } else if (!user?.id) {
+      setLoading(false);
     }
-  }, [user?.id])
+  }, [user?.id, sessionId]); // Added sessionId to dependencies
 
   const copyToClipboard = (text, type) => {
     try {
-      Clipboard.setString(String(text))   // ✅ ensure string
+      const textToCopy = String(text);
+      Clipboard.setString(textToCopy);
+      // Provide user feedback
+      showAlert('Success', `${type} copied to clipboard`);
     } catch (error) {
-      console.error('Copy failed:', error)
-      Alert.alert('Error', 'Failed to copy to clipboard')
+      console.error('Copy failed:', error);
+      showAlert('Error', 'Failed to copy to clipboard');
     }
-  }
+  };
   
   const handleBack = () => {
-    navigation.goBack()
-  }
+    if (navigation.canGoBack()) {
+      navigation.goBack();
+    }
+  };
 
   if (loading) {
     return (
@@ -69,20 +83,18 @@ const ShowCredentials = () => {
           <Text style={styles.loadingText}>Loading credentials...</Text>
         </View>
       </ScreenWrapper>
-    )
+    );
   }
 
   return (
     <ScreenWrapper>
       <View style={styles.container}>
-      
         <View style={styles.header}>
           <TouchableOpacity onPress={handleBack} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#007AFF" />
-            
           </TouchableOpacity>
           <Text style={styles.title}>Your Credentials</Text>
-          <View style={{ width: 60 }} /> {/* Spacer */}
+          <View style={{ width: 60 }} />
         </View>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
@@ -137,8 +149,8 @@ const ShowCredentials = () => {
         </ScrollView>
       </View>
     </ScreenWrapper>
-  )
-}
+  );
+};
 
 const styles = StyleSheet.create({
   container: {
@@ -158,9 +170,10 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e0e0e0',
   },
   backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
     padding: 8,
+    marginRight: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
   },
   backText: {
     color: '#007AFF',
@@ -252,6 +265,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 20,
   },
-})
+});
 
-export default ShowCredentials
+export default ShowCredentials;

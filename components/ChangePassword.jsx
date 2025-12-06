@@ -24,9 +24,9 @@ const ChangePassword = () => {
   const newPassRef = useRef('');
   const [confirmPass, setConfirmPass] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
-  const [showNewPassword, setShowNewPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showCurrentPassword, setShowCurrentPassword] = useState(true);
+  const [showNewPassword, setShowNewPassword] = useState(true);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(true);
   const [customAlert, setCustomAlert] = useState({ 
     visible: false, 
     title: '', 

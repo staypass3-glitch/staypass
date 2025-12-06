@@ -1,3 +1,4 @@
+import { useAuth } from '@/context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -18,17 +19,13 @@ const { width } = Dimensions.get('window');
 
 const ForgotPassword = () => {
   const navigation = useNavigation();
-  const [email, setEmail] = useState('');
+  const { signIn } = useAuth();
+  const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [step, setStep] = useState('email'); // 'email', 'otp', 'newPassword'
   
   // Animation values
   const fadeAnim = useState(new Animated.Value(0))[0];
@@ -65,9 +62,25 @@ const ForgotPassword = () => {
     return () => clearInterval(interval);
   }, [resendTimer, otpSent]);
 
+  // Function to clean phone number
+  const cleanPhoneNumber = (phone) => {
+    return phone.replace(/\D/g, '').slice(0, 10);
+  };
+
+  // Function to get full phone number with country code
+  const getFullPhoneNumber = () => {
+    const cleaned = cleanPhoneNumber(phone);
+    if (cleaned.length === 10) {
+      return `+91${cleaned}`;
+    }
+    return null;
+  };
+
   const handleSendOTP = async () => {
-    if (!email.trim()) {
-      Alert.alert('Error', 'Please enter your Phone Number');
+    const cleanedPhone = cleanPhoneNumber(phone);
+    
+    if (!cleanedPhone || cleanedPhone.length !== 10) {
+      Alert.alert('Error', 'Please enter a valid 10-digit phone number');
       return;
     }
 
@@ -75,20 +88,19 @@ const ForgotPassword = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
 
-      // For demo purposes, we'll simulate OTP sending
-      // In a real app, you would use Supabase's password reset email
-      // For now, we'll just move to the OTP step
+      // Simulate OTP sending (replace with actual OTP service)
+      await new Promise(resolve => setTimeout(resolve, 1500));
+      
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       setOtpSent(true);
-      setStep('otp');
       setResendTimer(30);
       setCanResend(false);
-      Alert.alert('Success', 'OTP sent to your email address! (Demo: Use any 6-digit code)');
+      Alert.alert('OTP Sent', `OTP has been sent to +91 ${cleanedPhone}`);
       
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       console.error('Error sending OTP:', error);
-      Alert.alert('Error', 'Failed to send OTP. Please check your email and try again.');
+      Alert.alert('Error', 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -122,17 +134,39 @@ const ForgotPassword = () => {
   const verifyOTP = async (otpCode) => {
     setLoading(true);
     try {
-      // For demo purposes, accept any 6-digit code
+      // For demo purposes, accept any 6-digit code starting with 1-9
       // In a real app, you would verify the OTP with your backend
-      if (otpCode.length === 6 && /^\d{6}$/.test(otpCode)) {
-        setStep('newPassword');
+      if (otpCode.length === 6 && /^[1-9]\d{5}$/.test(otpCode)) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        // Simulate OTP verification
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        // Get full phone number with country code
+        const fullPhoneNumber = getFullPhoneNumber();
+        if (!fullPhoneNumber) {
+          throw new Error('Invalid phone number');
+        }
+
+        // Here you would typically sign in the user after OTP verification
+        // For demo, we'll navigate to appropriate screen based on user role
+        Alert.alert('Success', 'OTP verified successfully!', [
+          {
+            text: 'Continue',
+            onPress: () => {
+              // Navigate to appropriate screen based on your app flow
+              navigation.navigate('Student'); // or AdminDashboard, GuardScanner, etc.
+            }
+          }
+        ]);
+        
       } else {
-        throw new Error('Invalid OTP format');
+        throw new Error('Invalid OTP');
       }
       
     } catch (error) {
       console.error('OTP verification error:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', 'Invalid OTP. Please try again.');
       
       // Clear OTP inputs
@@ -154,62 +188,27 @@ const ForgotPassword = () => {
     }
   };
 
-  const handleResetPassword = async () => {
-    if (!newPassword.trim() || !confirmPassword.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
-      return;
-    }
-
-    if (newPassword !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
-      return;
-    }
-
-    if (newPassword.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters long');
-      return;
-    }
-
-    try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      setLoading(true);
-
-      
-      
-      await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate API call
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Password updated successfully! (Demo mode)', [
-        {
-          text: 'OK',
-          onPress: () => navigation.navigate('SignIn')
-        }
-      ]);
-      
-    } catch (error) {
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      console.error('Error updating password:', error);
-      Alert.alert('Error', 'Failed to update password. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const renderEmailStep = () => (
+  const renderPhoneInput = () => (
     <View style={styles.formContainer}>
-      <Text style={styles.title}>Forgot Password</Text>
-      <Text style={styles.subtitle}>Enter your email to reset your password</Text>
+      <Text style={styles.title}>Enter Your Phone</Text>
+      <Text style={styles.subtitle}>We'll send you a 6-digit OTP to verify</Text>
       
       <View style={styles.inputContainer}>
-        <TextInput
-          placeholder="Phone Number"
-          value={email}
-          onChangeText={setEmail}
-          keyboardType="email-address"
-          autoCapitalize="none"
-          style={styles.input}
-          placeholderTextColor="#999"
-        />
+        <View style={styles.phoneInputContainer}>
+          <View style={styles.countryCode}>
+            <Text style={styles.countryCodeText}>+91</Text>
+          </View>
+          <TextInput
+            placeholder="10-digit phone number"
+            value={phone}
+            onChangeText={setPhone}
+            keyboardType="phone-pad"
+            autoCapitalize="none"
+            style={styles.phoneInput}
+            placeholderTextColor="#999"
+            maxLength={10}
+          />
+        </View>
       </View>
 
       <TouchableOpacity
@@ -234,13 +233,12 @@ const ForgotPassword = () => {
     </View>
   );
 
-  const renderOtpStep = () => (
+  const renderOtpInput = () => (
     <View style={styles.formContainer}>
       <Text style={styles.title}>Enter OTP</Text>
       <Text style={styles.subtitle}>
         We've sent a 6-digit code to{'\n'}
-        <Text style={styles.emailText}>{email}</Text>{'\n'}
-        <Text style={styles.demoText}>(Demo: Use any 6-digit code)</Text>
+        <Text style={styles.phoneText}>+91 {phone}</Text>
       </Text>
 
       <View style={styles.otpContainer}>
@@ -279,81 +277,16 @@ const ForgotPassword = () => {
             styles.resendButtonText,
             canResend ? styles.resendButtonActive : styles.resendButtonInactive
           ]}>
-            {canResend ? 'Resend' : `Resend in ${resendTimer}s`}
+            {canResend ? 'Resend OTP' : `Resend in ${resendTimer}s`}
           </Text>
         </TouchableOpacity>
       </View>
 
       <TouchableOpacity 
         style={styles.backButton}
-        onPress={() => setStep('email')}
+        onPress={() => setOtpSent(false)}
       >
-        <Text style={styles.backButtonText}>Back to Email</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderNewPasswordStep = () => (
-    <View style={styles.formContainer}>
-      <Text style={styles.title}>Set New Password</Text>
-      <Text style={styles.subtitle}>Enter your new password</Text>
-      
-      <View style={styles.inputContainer}>
-        <TextInput
-          placeholder="New Password"
-          value={newPassword}
-          onChangeText={setNewPassword}
-          secureTextEntry={!showPassword}
-          style={styles.input}
-          placeholderTextColor="#999"
-        />
-        <TouchableOpacity 
-          onPress={() => setShowPassword(!showPassword)}
-          style={styles.eyeIcon}
-        >
-          <Text style={styles.eyeIconText}>
-            {showPassword ? '👁️' : '👁️‍🗨️'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <View style={styles.inputContainer}>
-        <TextInput
-          placeholder="Confirm New Password"
-          value={confirmPassword}
-          onChangeText={setConfirmPassword}
-          secureTextEntry={!showConfirmPassword}
-          style={styles.input}
-          placeholderTextColor="#999"
-        />
-        <TouchableOpacity 
-          onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-          style={styles.eyeIcon}
-        >
-          <Text style={styles.eyeIconText}>
-            {showConfirmPassword ? '👁️' : '👁️‍🗨️'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleResetPassword}
-        disabled={loading}
-        activeOpacity={0.8}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.buttonText}>Reset Password</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => setStep('otp')}
-      >
-        <Text style={styles.backButtonText}>Back to OTP</Text>
+        <Text style={styles.backButtonText}>Change Phone Number</Text>
       </TouchableOpacity>
     </View>
   );
@@ -382,9 +315,7 @@ const ForgotPassword = () => {
           }
         ]}
       >
-        {step === 'email' && renderEmailStep()}
-        {step === 'otp' && renderOtpStep()}
-        {step === 'newPassword' && renderNewPasswordStep()}
+        {!otpSent ? renderPhoneInput() : renderOtpInput()}
       </Animated.View>
     </View>
   );
@@ -447,55 +378,59 @@ const styles = StyleSheet.create({
     marginBottom: 30,
     lineHeight: 24,
   },
-  emailText: {
+  phoneText: {
     color: '#2563eb',
     fontWeight: '600',
-  },
-  demoText: {
-    color: '#888',
-    fontSize: 14,
-    fontStyle: 'italic',
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 20,
-    borderColor: '#eee',
+    borderColor: '#e0e0e0',
     borderWidth: 1,
-    borderRadius: 15,
-    paddingHorizontal: 20,
-    height: 60,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 56,
     backgroundColor: '#f8f9fa',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 2,
     width: '100%',
   },
-  input: {
+  phoneInputContainer: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  countryCode: {
+    backgroundColor: '#f0f0f0',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+  },
+  countryCodeText: {
+    color: '#666',
+    fontWeight: '500',
+    fontSize: 14,
+  },
+  phoneInput: {
     flex: 1,
     height: 50,
     color: '#333',
     fontSize: 16,
-  },
-  eyeIcon: {
-    padding: 10,
-  },
-  eyeIconText: {
-    fontSize: 20,
+    paddingVertical: 0,
   },
   button: {
     backgroundColor: '#4158D0',
-    paddingVertical: 15,
-    borderRadius: 15,
+    paddingVertical: 16,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     shadowColor: '#4158D0',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 8,
+    shadowRadius: 8,
+    elevation: 6,
     width: '100%',
     marginBottom: 20,
   },
@@ -505,8 +440,8 @@ const styles = StyleSheet.create({
   },
   buttonText: {
     color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 18,
+    fontWeight: '600',
+    fontSize: 16,
   },
   backButton: {
     paddingVertical: 10,
@@ -520,36 +455,28 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginBottom: 30,
-    paddingHorizontal: 20,
+    paddingHorizontal: 10,
     width: '100%',
   },
   otpInputWrapper: {
     position: 'relative',
-    marginHorizontal: 6,
+    marginHorizontal: 4,
   },
   otpInput: {
-    width: 40,
-    height: 50,
+    width: 44,
+    height: 54,
     borderWidth: 2,
     borderColor: '#e2e8f0',
     borderRadius: 12,
     textAlign: 'center',
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
     color: '#1e293b',
     backgroundColor: '#ffffff',
-    shadowColor: '#2563eb',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
   },
   otpInputFilled: {
     borderColor: '#2563eb',
     backgroundColor: '#eff6ff',
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
   },
   dotIndicator: {
     position: 'absolute',
@@ -565,6 +492,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 30,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   resendText: {
     fontSize: 16,
@@ -585,4 +514,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default ForgotPassword; 
+export default ForgotPassword;
