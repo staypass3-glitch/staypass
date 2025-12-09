@@ -1,5 +1,5 @@
-import { CustomAlert } from '@/components';
 import React, { createContext, useContext, useState } from 'react';
+import CustomAlert from '../components/CustomAlert.jsx';
 
 const AlertContext = createContext();
 

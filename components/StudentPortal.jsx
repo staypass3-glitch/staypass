@@ -1,5 +1,4 @@
 import { MaterialIcons } from '@expo/vector-icons';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 import NetInfo from '@react-native-community/netinfo';
 import * as Application from 'expo-application';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -17,7 +16,6 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext.js';
 import { useUser } from '../context/UserContext.js';
-import '../firebase.js';
 import { supabase } from '../lib/supabase.js';
 import CustomAlert from './CustomAlert.jsx';
 import ScreenWrapper from './ScreenWrapper.jsx';
@@ -40,7 +38,7 @@ const StudentPortal = ({ navigation }) => {
     const unsubscribe = NetInfo.addEventListener(state => {
       setIsOffline(!state.isConnected);
       
-      // Show offline alert if connection is lost
+      
       if (!state.isConnected) {
         setCustomAlert({
           visible: true,
@@ -103,7 +101,7 @@ const StudentPortal = ({ navigation }) => {
         return;
       }
       
-      // Get the token
+    
       const token = (await Notifications.getExpoPushTokenAsync({
         projectId: 'a93753d8-c15c-4e24-aeea-d41040f243bb'
       })).data;
@@ -130,15 +128,15 @@ const StudentPortal = ({ navigation }) => {
       }
 
       // Required for Android
-      // if (Platform.OS === 'android') {
-      //   await Notifications.setNotificationChannelAsync('default', {
-      //     name: 'default',
-      //     importance: Notifications.AndroidImportance.MAX,
-      //     vibrationPattern: [0, 250, 250, 250],
-      //     lightColor: '#FF231F7C',
-      //     sound:'custom_noti',
-      //   });
-      // }
+      if (Platform.OS === 'android') {
+        await Notifications.setNotificationChannelAsync('default', {
+          name: 'default',
+          importance: Notifications.AndroidImportance.MAX,
+          vibrationPattern: [0, 250, 250, 250],
+          lightColor: '#FF231F7C',
+          sound:'custom_noti',
+        });
+      }
 
     } catch (error) {
       console.error('Error registering for push notifications:', error);
@@ -434,88 +432,6 @@ const StudentPortal = ({ navigation }) => {
     }
   }, []);
 
-  // Handle gallery image picker and QR code detection
-  const handlePickImage = useCallback(async () => {
-    if (isOffline) {
-      setCustomAlert({
-        visible: true,
-        title: 'No Internet Connection',
-        message: 'Cannot scan QR code from gallery without internet connection. Please check your connection and try again.',
-        buttons: [{ text: 'OK' }]
-      });
-      return;
-    }
-
-    try {
-      // Check and request gallery permissions if needed
-      let hasPermission = galleryPermission;
-      if (!hasPermission) {
-        hasPermission = await requestGalleryPermission();
-      }
-
-      if (!hasPermission) {
-        return; // Permission not granted
-      }
-
-      // Launch image picker
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: false,
-        quality: 1,
-        base64: true, // Include base64 for better QR code detection
-      });
-
-      if (!result.canceled && result.assets && result.assets.length > 0) {
-        setLoading(true);
-        
-        try {
-          // Use Camera's barcode scanner to scan from image
-          // expo-camera has built-in support for scanning from images
-          const scanResult = await CameraView.prototype.scanFromURLAsync?.(result.assets[0].uri);
-          
-          if (scanResult && scanResult.length > 0) {
-            const qrData = scanResult[0].data;
-            await processQRCode(qrData);
-          } else {
-
-            const scanned = await BarCodeScanner.scanFromURLAsync(result.assets[0].uri);
-            
-            if (scanned && scanned.length > 0) {
-              const qrData = scanned[0].data;
-              await processQRCode(qrData);
-            } else {
-              setCustomAlert({
-                visible: true,
-                title: 'No QR Code Found',
-                message: 'No QR code was detected in the selected image. Please try another image with a clear QR code.',
-                buttons: [{ text: 'OK' }]
-              });
-            }
-          }
-        } catch (scanError) {
-          console.error('Error scanning image:', scanError);
-          setCustomAlert({
-            visible: true,
-            title: 'Scan Failed',
-            message: 'Could not scan QR code from the image. Please ensure the QR code is clear and try again.',
-            buttons: [{ text: 'OK' }]
-          });
-        } finally {
-          setLoading(false);
-        }
-      }
-    } catch (error) {
-      console.error('Error picking image:', error);
-      setCustomAlert({
-        visible: true,
-        title: 'Error',
-        message: 'An error occurred while accessing your gallery. Please try again.',
-        buttons: [{ text: 'OK' }]
-      });
-      setLoading(false);
-    }
-  }, [isOffline, processQRCode, galleryPermission, requestGalleryPermission]);
-
   // Memoize loading overlay
   const loadingOverlay = useMemo(() => (
     <View style={styles.loadingOverlay}>
@@ -636,15 +552,6 @@ const StudentPortal = ({ navigation }) => {
               }
             </Text>
           </View>
-
-          {/* Gallery Button */}
-          <TouchableOpacity 
-            style={[styles.galleryButton, isOffline && styles.disabledButton]}
-            onPress={isOffline ? null : handlePickImage}
-            disabled={isOffline || loading}
-          >
-           <FontAwesome name="photo" size={24} color="white" />
-          </TouchableOpacity>
         </View>
         
         <View style={styles.footer}>
@@ -812,28 +719,6 @@ const styles = StyleSheet.create({
     width: '100%',
     color: '#64748b',
     fontSize: 14,
-  },
-  galleryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#8b5cf6',
-    borderRadius: 25,
-    paddingVertical: 15,
-    paddingHorizontal: 10,
-    marginTop: 20,
-    width: '10%',
-    elevation: 3,
-    shadowColor: '#8b5cf6',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
-  },
-  galleryButtonText: {
-    color: 'white',
-    fontSize: 16,
-    fontWeight: '600',
-    marginLeft: 8,
   },
   footer: {
     padding: 20,

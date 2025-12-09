@@ -6,7 +6,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Animated,
   Dimensions,
   FlatList,
   Modal,
@@ -19,7 +18,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
 
 // Memoized components to prevent unnecessary re-renders
 const StatusBadge = React.memo(({ status, getStatusColor }) => (
@@ -31,7 +30,7 @@ const StatusBadge = React.memo(({ status, getStatusColor }) => (
 const DetailRow = React.memo(({ label, value }) => (
   <View style={styles.detailRow}>
     <Text style={styles.label}>{label}</Text>
-    <Text style={styles.value} numberOfLines={1} ellipsizeMode="tail">
+    <Text style={styles.value} numberOfLines={2} ellipsizeMode="tail">
       {value || 'Not recorded'}
     </Text>
   </View>
@@ -48,8 +47,8 @@ const History = () => {
   const [error, setError] = useState(null);
   
   // Refs for animation values to prevent recreation
-  const modalAnim = useRef(new Animated.Value(0)).current;
   const isMounted = useRef(true);
+  const flatListRef = useRef(null);
 
   useEffect(() => {
     return () => {
@@ -181,25 +180,8 @@ const History = () => {
   );
 
   const toggleFilterModal = useCallback(() => {
-    if (showFilterModal) {
-      Animated.timing(modalAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        if (isMounted.current) {
-          setShowFilterModal(false);
-        }
-      });
-    } else {
-      setShowFilterModal(true);
-      Animated.timing(modalAnim, {
-        toValue: 1,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
-    }
-  }, [showFilterModal, modalAnim]);
+    setShowFilterModal(!showFilterModal);
+  }, [showFilterModal]);
 
   const selectFilter = useCallback((filterId) => {
     setSelectedFilter(filterId);
@@ -224,93 +206,67 @@ const History = () => {
     }
   }, []);
 
-  const renderFilterButton = useCallback(({ item }) => {
-    const isSelected = selectedFilter === item.id;
+  const renderItem = useCallback(({ item, index }) => {
     return (
-      <TouchableOpacity
-        style={[styles.filterButton, isSelected && styles.selectedFilterButton]}
-        onPress={() => selectFilter(item.id)}
-      >
-        <Ionicons 
-          name={item.icon} 
-          size={20} 
-          color={isSelected ? '#fff' : '#6c757d'} 
-        />
-        <Text style={[styles.filterButtonText, isSelected && styles.selectedFilterButtonText]}>
-          {item.label}
-        </Text>
-      </TouchableOpacity>
-    );
-  }, [selectedFilter, selectFilter]);
-
-  const renderStatusButton = useCallback(({ item }) => {
-    const isSelected = selectedStatus === item.id;
-    return (
-      <TouchableOpacity
-        style={[
-          styles.statusButton,
-          isSelected && { backgroundColor: item.color }
-        ]}
-        onPress={() => selectStatus(item.id)}
-      >
-        <Text style={[
-          styles.statusButtonText,
-          isSelected && { color: '#fff' }
-        ]}>
-          {item.label}
-        </Text>
-      </TouchableOpacity>
-    );
-  }, [selectedStatus, selectStatus]);
-
-  // Memoized render item to prevent unnecessary re-renders
-  const renderItem = useCallback(({ item }) => {
-    return (
-      <View style={styles.cardContainer}>
+      <View style={[
+        styles.cardContainer,
+        index === filteredHistory.length - 1 && styles.lastCard
+      ]}>
         <LinearGradient 
-          colors={['#fff', '#fff']} 
+          colors={['#ffffff', '#f8f9fa']} 
           style={styles.cardGradient}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
         >
-          <StatusBadge status={item.status} getStatusColor={getStatusColor} />
+          <View style={styles.cardHeader}>
+            <StatusBadge status={item.status} getStatusColor={getStatusColor} />
+            <Text style={styles.dateText}>
+              {new Date(item.created_at).toLocaleDateString('en-US', {
+                weekday: 'short',
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric'
+              })}
+            </Text>
+          </View>
           
-          <DetailRow label="Leave Start:" value={item.date_to_go} />
-          <DetailRow label="Leave End:" value={item.date_to_come} />
-          <DetailRow label="Actual Departure:" value={item.actual_scan_out} />
-          <DetailRow label="Actual Return:" value={item.actual_scan_in} />
+          <View style={styles.dateSection}>
+            <DetailRow label="Leave Start:" value={item.date_to_go} />
+            <DetailRow label="Leave End:" value={item.date_to_come} />
+            <DetailRow label="Actual Departure:" value={item.actual_scan_out} />
+            <DetailRow label="Actual Return:" value={item.actual_scan_in} />
+          </View>
           
-          {item.description && (
-            <View style={styles.descriptionContainer}>
-              {/* Description */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Description:</Text>
-                <Text
-                  style={styles.descriptionText}
-                  numberOfLines={3}
-                  ellipsizeMode="tail"
-                >
-                  {item.description}
-                </Text>
-              </View>
-
-              {/* Destination */}
-              <View style={styles.fieldContainer}>
-                <Text style={styles.label}>Destination:</Text>
-                <Text
-                  style={styles.descriptionText}
-                  numberOfLines={3}
-                  ellipsizeMode="tail"
-                >
-                  {item.destination}
-                </Text>
-              </View>
+          {/* Description and Destination Section - Always visible */}
+          <View style={styles.infoSection}>
+            {/* Description */}
+            <View style={styles.infoField}>
+              <Text style={styles.infoLabel}>Description:</Text>
+              <Text
+                style={styles.infoValue}
+                numberOfLines={3}
+                ellipsizeMode="tail"
+              >
+                {item.description || 'No description provided'}
+              </Text>
             </View>
-          )}
+
+            {/* Destination */}
+            <View style={styles.infoField}>
+              <Text style={styles.infoLabel}>Destination:</Text>
+              <Text
+                style={styles.infoValue}
+                numberOfLines={3}
+                ellipsizeMode="tail"
+              >
+                {item.destination || 'Not specified'}
+              </Text>
+            </View>
+          </View>
         </LinearGradient>
       </View>
     );
-  }, [getStatusColor]);
+  }, [filteredHistory.length, getStatusColor]);
 
   const keyExtractor = useCallback((item) => item.id.toString(), []);
 
@@ -396,6 +352,7 @@ const History = () => {
           </View>
         ) : !error && (
           <FlatList
+            ref={flatListRef}
             data={filteredHistory}
             renderItem={renderItem}
             keyExtractor={keyExtractor}
@@ -409,16 +366,15 @@ const History = () => {
                 tintColor={'#007AFF'}
               />
             }
-            removeClippedSubviews={true}
-            initialNumToRender={8}
+            removeClippedSubviews={false}
+            initialNumToRender={6}
             maxToRenderPerBatch={8}
-            windowSize={10}
-            updateCellsBatchingPeriod={50}
-            getItemLayout={(data, index) => ({
-              length: 220,
-              offset: 220 * index,
-              index,
-            })}
+            windowSize={15}
+            updateCellsBatchingPeriod={100}
+            legacyImplementation={false}
+            onEndReachedThreshold={0.5}
+            ListFooterComponent={<View style={styles.listFooter} />}
+            scrollEventThrottle={16}
           />
         )}
       </View>
@@ -427,7 +383,7 @@ const History = () => {
       <Modal
         visible={showFilterModal}
         transparent={true}
-        animationType="none"
+        animationType="slide"
         onRequestClose={toggleFilterModal}
       >
         <TouchableOpacity 
@@ -435,20 +391,7 @@ const History = () => {
           onPress={toggleFilterModal}
           activeOpacity={1}
         >
-          <Animated.View
-            style={[
-              styles.modalContent,
-              {
-                opacity: modalAnim,
-                transform: [{
-                  translateY: modalAnim.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [50, 0]
-                  })
-                }]
-              }
-            ]}
-          >
+          <View style={styles.modalContent}>
             <LinearGradient
               colors={['#ffffff', '#f8f9fa']}
               style={styles.modalGradient}
@@ -490,7 +433,7 @@ const History = () => {
                 ))}
               </View>
             </LinearGradient>
-          </Animated.View>
+          </View>
         </TouchableOpacity>
       </Modal>
     </ScreenWrapper>
@@ -499,19 +442,26 @@ const History = () => {
 
 export default History;
 
+// Constants for consistent sizing - INCREASED CARD HEIGHT
+const CARD_HEIGHT = 440; // Increased from 320 to 440 for much larger cards
+const CARD_MARGIN_VERTICAL = 16; // Margin between cards
+const TAB_BAR_HEIGHT = 80; // Adjust based on your actual tab bar height
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
     paddingHorizontal: 16,
-    backgroundColor: 'white'
+    backgroundColor: 'white',
+    paddingTop: 8,
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 16,
-    paddingTop: 20,
+    paddingVertical: 12,
     marginBottom: 8,
+    zIndex: 10,
+    backgroundColor: 'white',
   },
   headerTitle: {
     fontSize: 24,
@@ -540,6 +490,7 @@ const styles = StyleSheet.create({
   statusFilterContainer: {
     marginBottom: 12,
     paddingVertical: 4,
+    minHeight: 44,
   },
   statusFilterContent: {
     paddingHorizontal: 4,
@@ -570,40 +521,67 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   listContent: {
-    paddingBottom: 100,
     paddingTop: 8,
+    paddingBottom: TAB_BAR_HEIGHT + 20,
+  },
+  listFooter: {
+    height: TAB_BAR_HEIGHT + 30,
   },
   cardContainer: {
-    marginVertical: 10,
+    marginVertical: 12,
     marginHorizontal: 2,
+    minHeight: CARD_HEIGHT, // Changed to minHeight for flexibility
+  },
+  lastCard: {
+    marginBottom: -TAB_BAR_HEIGHT ,
   },
   cardGradient: {
-    borderRadius: 12,
-    padding: 18,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-    marginBottom: 4,
+    borderRadius: 16,
+    padding: 24, // Increased padding from 20 to 24
+    borderWidth: 1,
+    borderColor: '#e0e0e0',
+    minHeight: CARD_HEIGHT, // Ensures minimum height
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 18, // Increased spacing
   },
   statusBadge: {
-    alignSelf: 'flex-start',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     borderRadius: 20,
-    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+    minWidth: 90,
+    alignItems: 'center',
   },
   statusText: {
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
     color: '#fff',
     textTransform: 'capitalize',
+  },
+  dateText: {
+    fontSize: 13,
+    color: '#6c757d',
+    fontWeight: '500',
+    textAlign: 'right',
+  },
+  dateSection: {
+    marginBottom: 18, // Increased spacing
+    paddingBottom: 18, // Increased spacing
+    borderBottomWidth: 1,
+    borderBottomColor: '#e9ecef',
   },
   detailRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: 14, // Increased spacing
     paddingVertical: 2,
   },
   label: {
@@ -620,26 +598,40 @@ const styles = StyleSheet.create({
     textAlign: 'right',
     marginLeft: 8,
   },
-  descriptionContainer: {
-    marginTop: 16,
-    paddingTop: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e9ecef',
+  infoSection: {
+    flex: 1,
+    justifyContent: 'flex-start',
+    minHeight: 120, // Reduced minimum height
   },
-  fieldContainer: {
-    marginBottom: 12,
+  infoField: {
+    marginBottom: 12, // Reduced spacing between fields
   },
-  descriptionText: {
+  infoLabel: {
     fontSize: 14,
     color: '#495057',
-    marginTop: 4,
+    fontWeight: '600',
+    marginBottom: 5,
+  },
+  infoValue: {
+    fontSize: 14,
+    color: '#6c757d',
     lineHeight: 20,
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    backgroundColor: '#f8f9fa',
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#007AFF',
+    borderColor:'#c7d7d9',
+    borderWidth:1,
+    minHeight: 44, // Reduced minimum height
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 40,
+    paddingBottom: TAB_BAR_HEIGHT,
   },
   loadingText: {
     fontSize: 16,
@@ -652,6 +644,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 32,
     paddingTop: 40,
+    paddingBottom: TAB_BAR_HEIGHT,
   },
   emptyStateText: {
     fontSize: 18,
@@ -672,6 +665,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     paddingTop: 40,
+    paddingBottom: TAB_BAR_HEIGHT,
   },
   errorText: {
     fontSize: 16,

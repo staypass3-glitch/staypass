@@ -4,7 +4,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Image,
   Modal,
   Pressable,
@@ -26,6 +25,7 @@ import ScreenWrapper from './ScreenWrapper';
 const LOGOUT_DELAY = 2000;
 const CAMERA_HEIGHT = 400;
 const MemoizedMaterialIcons  = React.memo(MaterialIcons);
+
 // Translations
 const translations = {
   en: {
@@ -159,40 +159,60 @@ const GuardScanner = () => {
   }, [user?.id]);
 
   async function notifyStudentOfScan(studentId) {
+
     const { data, error } = await supabase
       .from("user_push_tokens")
       .select("expo_push_token")
-      .eq("user_id", studentId)
-      .maybeSingle();
+      .eq("user_id", studentId);   // ✅ get ALL tokens
   
-      console.log('expo push token is ', data.expo_push_token);
-
     if (error) {
-      console.log("Error fetching token:", error);
+      console.error("Error fetching tokens:", error);
       return;
     }
   
-    if (!data?.expo_push_token) {
-      console.log("Student push token not found");
+    if (!data || data.length === 0) {
+      console.log("No push tokens found for student:", studentId);
       return;
     }
-
-    await fetch("https://exp.host/--/api/v2/push/send", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        to: data.expo_push_token,
-        title: "Scan Successful",
-        body: "Your QR code was scanned.",
-        data: { refresh: true },  
-        priority:"high",
-      }),
-    });
   
-    console.log("Push sent to student:", studentId);
+    // ✅ Extract tokens and filter invalid ones
+    const tokens = data
+      .map(item => item.expo_push_token)
+      .filter(token => token && token.startsWith("ExponentPushToken"));
+  
+    if (tokens.length === 0) {
+      console.log("No valid Expo tokens found.");
+      return;
+    }
+  
+    console.log("Sending notification to", tokens.length, "devices");
+  
+ 
+    const messages = tokens.map(token => ({
+      to: token,
+      title: "Scan Successful",
+      body: "Your QR code was scanned.",
+      data: { refresh: true },
+      priority: "high",
+    }));
+  
+    try {
+      const response = await fetch("https://exp.host/--/api/v2/push/send", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(messages),  
+      });
+  
+      const result = await response.json();
+      console.log("Push response:", result);
+  
+    } catch (error) {
+      console.error("Failed to send push notification:", error);
+    }
   }
+  
   
 
   const fetchGuardDetails = useCallback(async () => {
@@ -211,10 +231,11 @@ const GuardScanner = () => {
       if (error) throw error;
       
       setGuardCollegeId(guardProfile.college_id);
-      setIsSessionJoined(!!guardProfile.current_session_id);
+      
+      setIsSessionJoined(!!guardProfile.current_session_id && !!guardProfile.college_id);
     } catch (error) {
       console.error("Error fetching guard's details:", error);
-      Alert.alert('Error', error.message || 'Failed to load guard details');
+      showAlert('Error', error.message || 'Failed to load guard details');
     } finally {
       setGuardDetailsLoaded(true);
       setCustomIndicator(false);
@@ -238,7 +259,7 @@ const GuardScanner = () => {
       if (error) throw error;
     } catch (error) {
       console.error('Error saving language:', error);
-      Alert.alert('Error', 'Failed to save language preference');
+      showAlert('Error', 'Failed to save language preference');
     }
   };
 
@@ -246,7 +267,7 @@ const GuardScanner = () => {
     const trimmedSessionId = sessionId.trim();
     
     if (!trimmedSessionId) {
-      Alert.alert('Error', 'Please enter a session ID.');
+      showAlert('Error', 'Please enter a session ID.');
       return;
     }
 
@@ -281,7 +302,7 @@ const GuardScanner = () => {
       setSessionId('');
     } catch (error) {
       console.error("Error joining session:", error);
-      Alert.alert('Error', error.message || 'Failed to join session');
+      showAlert('Error', error.message || 'Failed to join session');
     } finally {
       setJoinLoading(false);
     }
@@ -290,7 +311,7 @@ const GuardScanner = () => {
   const handleBarCodeScanned = useCallback(async ({ data }) => {
     if (scanningRef.current || !guardDetailsLoaded || !guardCollegeId) {
       if (!guardDetailsLoaded || !guardCollegeId) {
-        Alert.alert('Error', 'Guard details not fully loaded. Please wait.');
+        showAlert('Error', 'Guard details not fully loaded. Please wait.');
       }
       return;
     }
@@ -316,7 +337,7 @@ const GuardScanner = () => {
       if (studentError) throw studentError;
 
       if (student.college_id !== guardCollegeId) {
-        Alert.alert('Error', 'You can only approve requests for students from your college.');
+        showAlert('Error', 'You can only approve requests for students from your college.');
         setScanned(false);
         scanningRef.current = false;
         setScanLoading(false);
@@ -350,7 +371,7 @@ const GuardScanner = () => {
         if (fetchError) throw fetchError;
 
         if (!latestRequest) {
-          Alert.alert('Error', 'No approved request found for this student.');
+          showAlert('Error', 'No approved request found for this student.');
           setScanned(false);
           scanningRef.current = false;
           setScanLoading(false);
@@ -370,10 +391,10 @@ const GuardScanner = () => {
 
       await notifyStudentOfScan(student_id);
       setStudentDetails({ ...student, type });
-      Alert.alert('Success', `Student ${type} recorded successfully!`);
+      showAlert('Success', `Student ${type} recorded successfully!`);
     } catch (error) {
       console.error('Error scanning QR code:', error);
-      Alert.alert('Error', error.message || 'Please scan a valid QR code');
+      showAlert('Error', error.message || 'Please scan a valid QR code');
       setScanned(false);
       scanningRef.current = false;
     } finally {
@@ -398,7 +419,7 @@ const GuardScanner = () => {
       showAlert('Success', 'Left session successfully');
     } catch (error) {
       console.error(error);
-      Alert.alert('Error', 'Failed to leave session');
+      showAlert('Error', 'Failed to leave session');
     } finally {
       setLeaveLoading(false);
     }

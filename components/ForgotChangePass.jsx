@@ -5,13 +5,13 @@ import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 
 const ForgotChangePass = () => {<ScrollView></ScrollView>
@@ -140,7 +140,7 @@ const ForgotChangePass = () => {<ScrollView></ScrollView>
     try {
       setLoading(true);
 
-      // Simulate password change API call
+  
       await new Promise(resolve => setTimeout(resolve, 1500));
       
       showAlert('Success', 'Password changed successfully!', [

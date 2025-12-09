@@ -2,10 +2,11 @@ import CustomIndicator from '@/components/CustomIndicator.jsx';
 import ScreenWrapper from '@/components/ScreenWrapper';
 import fonts from '@/constants/fonts';
 import theme from '@/constants/theme';
+import { firebaseApp } from '@/firebase.js';
 import { Ionicons } from '@expo/vector-icons';
 import DateTimePicker from "@react-native-community/datetimepicker";
+import { getMessaging, onMessage } from "@react-native-firebase/messaging";
 import { LinearGradient } from 'expo-linear-gradient';
-import * as Notifications from "expo-notifications";
 import { useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -395,39 +396,33 @@ const StudentDashboard = () => {
 
 
 
-useEffect(() => {
-  console.log('Setting up notification listeners');
+  useEffect(() => {
+    const messaging = getMessaging(firebaseApp);
   
-  const receivedListener = Notifications.addNotificationReceivedListener((notification) => {
-    console.log('Notification received:', notification);
-    if (notification.request.content.data?.refresh) {
-      console.log('Triggering refresh from notification');
-      setNotificationTrigger(prev => prev + 1);
-    }
-  });
+    
+    const unsubscribe = onMessage(messaging, remoteMessage => {
+      console.log('FCM Message received in foreground:', remoteMessage);
+  
+      // Access your data.body
+      if (remoteMessage?.data?.body) {
+        try {
+          const parsedData = JSON.parse(remoteMessage.data.body);
+          console.log('Parsed result value:', parsedData.refresh);
+  
+          if(parsedData.refresh){
+            console.log('truue is calllleld');
+             fetchData();
+          }
+        } catch (e) {
+          console.error('Error parsing FCM data body:', e);
+        }
+      }
+    });
+  
+    // Cleanup listener on unmount
+    return () => unsubscribe();
+  }, []);
 
-  const responseListener = Notifications.addNotificationResponseReceivedListener((response) => {
-    console.log('Notification tapped:', response);
-    if (response.notification.request.content.data?.refresh) {
-      console.log('Triggering refresh from tapped notification');
-      setNotificationTrigger(prev => prev + 1);
-    }
-  });
-
-  return () => {
-    console.log('Cleaning up notification listeners');
-    receivedListener.remove();
-    responseListener.remove();
-  };
-}, []); 
-
-// Trigger fetchData when notification comes
-useEffect(() => {
-  if (user?.id && notificationTrigger > 0) {
-    console.log('Fetching data due to notification');
-    fetchData();
-  }
-}, [notificationTrigger, user?.id, fetchData]);
 
   useEffect(() => {
     const unsubscribe = navigation.addListener('focus', () => {

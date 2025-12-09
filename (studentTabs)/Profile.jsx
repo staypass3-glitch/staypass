@@ -433,8 +433,6 @@ const Profile = () => {
       paddingHorizontal: 8,
     },
     buttonSection: {
-      paddingBottom: 40,
-      paddingTop: 0,
       paddingHorizontal: 4,
     },
     updateButton: {
