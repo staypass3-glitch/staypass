@@ -21,6 +21,7 @@ import CustomAlert from './CustomAlert';
 import CustomIndicator from './CustomIndicator';
 import CustomLoadingScreen from './CustomLoadingScreen.jsx';
 import ScreenWrapper from './ScreenWrapper';
+
 // Constants
 const LOGOUT_DELAY = 2000;
 const CAMERA_HEIGHT = 400;
@@ -40,6 +41,7 @@ const translations = {
     name: 'Name',
     room: 'Room',
     department: 'Department',
+    destination: 'Destination',
     action: 'Action',
     goingHome: 'Going Home',
     returning: 'Returning',
@@ -55,6 +57,10 @@ const translations = {
     howToUse: 'How to Use',
     noImage: 'No Image',
     closeSettings: 'Close Settings',
+    parentNotified: 'Parent Notified via SMS',
+    parentNotificationFailed: 'Failed to notify parent',
+    smsNotificationSent: 'SMS sent to parent successfully',
+    smsNotificationFailed: 'Failed to send SMS to parent',
     instructions: [
       '1. Enter the Session ID provided by your admin',
       '2. Click "Join Session" to start your duty',
@@ -75,6 +81,7 @@ const translations = {
     name: 'नाव',
     room: 'खोली',
     department: 'विभाग',
+    destination: 'गंतव्य स्थान',
     action: 'कृती',
     goingHome: 'घरी जात आहे',
     returning: 'परत येत आहे',
@@ -90,6 +97,10 @@ const translations = {
     howToUse: 'कसे वापरावे',
     noImage: 'चित्र नाही',
     closeSettings: 'सेटिंग्ज बंद करा',
+    parentNotified: 'पालकांना एसएमएस द्वारे सूचित केले',
+    parentNotificationFailed: 'पालकांना सूचित करण्यात अयशस्वी',
+    smsNotificationSent: 'पालकांना एसएमएस पाठवला',
+    smsNotificationFailed: 'पालकांना एसएमएस पाठविण्यात अयशस्वी',
     instructions: [
       '१. तुमच्या प्रशासकाने दिलेला सत्र आयडी प्रविष्ट करा',
       '२. तुमची ड्युटी सुरू करण्यासाठी "सत्रात सामील व्हा" वर क्लिक करा',
@@ -112,7 +123,8 @@ const GuardScanner = () => {
   const [studentImage, setStudentImage] = useState(null);
   const [language, setLanguage] = useState('en');
   const [settingsVisible, setSettingsVisible] = useState(false);
-  const [customAlert,setCustomAlert] = useState({visible:false,title:'',message:'',buttons:[]})
+  const [customAlert,setCustomAlert] = useState({visible:false,title:'',message:'',buttons:[]});
+  const [smsNotificationStatus, setSmsNotificationStatus] = useState(null);
   // Individual loading states
   const [joinLoading, setJoinLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
@@ -128,6 +140,7 @@ const GuardScanner = () => {
   const showAlert = useCallback((title,message,buttons=[])=>{
     setCustomAlert({visible:true,title:title,message:message,buttons:buttons});
   });
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -159,44 +172,42 @@ const GuardScanner = () => {
   }, [user?.id]);
 
   async function notifyStudentOfScan(studentId) {
-
-    const { data, error } = await supabase
-      .from("user_push_tokens")
-      .select("expo_push_token")
-      .eq("user_id", studentId);   // ✅ get ALL tokens
-  
-    if (error) {
-      console.error("Error fetching tokens:", error);
-      return;
-    }
-  
-    if (!data || data.length === 0) {
-      console.log("No push tokens found for student:", studentId);
-      return;
-    }
-  
-    // ✅ Extract tokens and filter invalid ones
-    const tokens = data
-      .map(item => item.expo_push_token)
-      .filter(token => token && token.startsWith("ExponentPushToken"));
-  
-    if (tokens.length === 0) {
-      console.log("No valid Expo tokens found.");
-      return;
-    }
-  
-    console.log("Sending notification to", tokens.length, "devices");
-  
- 
-    const messages = tokens.map(token => ({
-      to: token,
-      title: "Scan Successful",
-      body: "Your QR code was scanned.",
-      data: { refresh: true },
-      priority: "high",
-    }));
-  
     try {
+      const { data, error } = await supabase
+        .from("user_push_tokens")
+        .select("expo_push_token")
+        .eq("user_id", studentId);
+
+      if (error) {
+        console.error("Error fetching tokens:", error);
+        return false;
+      }
+
+      if (!data || data.length === 0) {
+        console.log("No push tokens found for student:", studentId);
+        return false;
+      }
+
+      // Extract tokens and filter invalid ones
+      const tokens = data
+        .map(item => item.expo_push_token)
+        .filter(token => token && token.startsWith("ExponentPushToken"));
+
+      if (tokens.length === 0) {
+        console.log("No valid Expo tokens found.");
+        return false;
+      }
+
+      console.log("Sending notification to", tokens.length, "devices");
+
+      const messages = tokens.map(token => ({
+        to: token,
+        title: "Scan Successful",
+        body: "Your QR code was scanned.",
+        data: { refresh: true },
+        priority: "high",
+      }));
+
       const response = await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",
         headers: {
@@ -204,16 +215,79 @@ const GuardScanner = () => {
         },
         body: JSON.stringify(messages),  
       });
-  
+
       const result = await response.json();
       console.log("Push response:", result);
-  
+      return true;
     } catch (error) {
       console.error("Failed to send push notification:", error);
+      return false;
     }
   }
-  
-  
+
+  async function notifyParentViaSMS(studentName, destination, parentPhone, type) {
+    try {
+      // Validate phone number
+      if (!parentPhone || parentPhone.trim() === '') {
+        console.log('Parent phone number not available');
+        return { success: false, message: 'Parent phone number not available' };
+      }
+
+      // Clean phone number (remove spaces, dashes, etc.)
+      const cleanedPhone = parentPhone.replace(/\D/g, '');
+      
+      // Validate Indian phone number format
+      if (!cleanedPhone.startsWith('91') || cleanedPhone.length !== 12) {
+        console.log('Invalid phone number format:', parentPhone);
+        return { success: false, message: 'Invalid phone number format' };
+      }
+
+      const now = new Date();
+      const date = now.toLocaleDateString('en-IN', { 
+        day: '2-digit', 
+        month: '2-digit', 
+        year: 'numeric' 
+      });
+      const time = now.toLocaleTimeString('en-IN', { 
+        hour: '2-digit', 
+        minute: '2-digit',
+        hour12: true 
+      });
+
+      const notificationData = {
+        studentName: studentName,
+        destination: destination,
+        date: date,
+        time: time,
+        type: type // 'exit' or 'return'
+      };
+
+      console.log('Sending SMS to parent:', {
+        phone: cleanedPhone,
+        studentName,
+        destination,
+        type
+      });
+
+      const { data, error } = await supabase.functions.invoke('notify-parent-sms', {
+        body: {
+          notification: notificationData,
+          parent_phone: cleanedPhone
+        }
+      });
+
+      if (error) {
+        console.error('Error sending parent SMS:', error);
+        return { success: false, message: error.message || 'Failed to send SMS' };
+      }
+
+      console.log(`Parent SMS sent successfully for ${type}:`, data);
+      return { success: true, message: data?.message || 'SMS sent successfully' };
+    } catch (error) {
+      console.error('Failed to send parent SMS notification:', error);
+      return { success: false, message: error.message || 'Network error' };
+    }
+  }
 
   const fetchGuardDetails = useCallback(async () => {
     if (!user?.id) return;
@@ -319,13 +393,20 @@ const GuardScanner = () => {
     scanningRef.current = true;
     setScanned(true);
     setScanLoading(true);
+    setSmsNotificationStatus(null);
 
     try {
-      const qrData = JSON.parse(data);
+      let qrData;
+      try {
+        qrData = JSON.parse(data);
+      } catch (parseError) {
+        throw new Error('Invalid QR code format: Cannot parse JSON');
+      }
+      
       const { student_id, type } = qrData;
 
       if (!student_id || !type || !['exit', 'return'].includes(type)) {
-        throw new Error('Invalid QR code format');
+        throw new Error('Invalid QR code format: Missing student_id or invalid type');
       }
 
       const { data: student, error: studentError } = await supabase
@@ -334,21 +415,44 @@ const GuardScanner = () => {
         .eq('id', student_id)
         .single();
 
-      if (studentError) throw studentError;
+      if (studentError) {
+        if (studentError.code === 'PGRST116') {
+          throw new Error('Student not found');
+        }
+        throw studentError;
+      }
 
       if (student.college_id !== guardCollegeId) {
-        showAlert('Error', 'You can only approve requests for students from your college.');
-        setScanned(false);
-        scanningRef.current = false;
-        setScanLoading(false);
-        return;
+        throw new Error('You can only approve requests for students from your college');
       }
 
       if (student.profile_image) {
         setStudentImage(student.profile_image);
       }
 
+      let destination = null;
+      let smsResult = null;
+
       if (type === 'exit') {
+        // Get the destination from the latest approved request
+        const { data: latestRequest, error: requestError } = await supabase
+          .from('requests')
+          .select('destination')
+          .eq('student_id', student_id)
+          .eq('status', 'approved')
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single();
+
+        if (requestError && requestError.code !== 'PGRST116') {
+          console.error('Error fetching request:', requestError);
+          // Don't throw error here, continue without destination
+        }
+
+        if (latestRequest) {
+          destination = latestRequest.destination;
+        }
+
         const { error: exitError } = await supabase
           .from('requests')
           .update({ actual_scan_out: new Date().toISOString() })
@@ -358,25 +462,39 @@ const GuardScanner = () => {
           .limit(1);
 
         if (exitError) throw exitError;
+
+        // Send SMS to parent for EXIT
+        if (student.parent_phone && destination) {
+          smsResult = await notifyParentViaSMS(
+            student.name,
+            destination,
+            student.parent_phone,
+            'exit'
+          );
+          setSmsNotificationStatus(smsResult);
+        }
       } else if (type === 'return') {
         const { data: latestRequest, error: fetchError } = await supabase
           .from('requests')
-          .select('id, status')
+          .select('id, status, destination')
           .eq('student_id', student_id)
           .eq('status', 'approved')
           .order('created_at', { ascending: false })
           .limit(1)
           .single();
 
-        if (fetchError) throw fetchError;
+        if (fetchError) {
+          if (fetchError.code === 'PGRST116') {
+            throw new Error('No approved request found for this student');
+          }
+          throw fetchError;
+        }
 
         if (!latestRequest) {
-          showAlert('Error', 'No approved request found for this student.');
-          setScanned(false);
-          scanningRef.current = false;
-          setScanLoading(false);
-          return;
+          throw new Error('No approved request found for this student');
         }
+
+        destination = latestRequest.destination;
 
         const { error: returnError } = await supabase
           .from('requests')
@@ -387,11 +505,39 @@ const GuardScanner = () => {
           .eq('id', latestRequest.id);
 
         if (returnError) throw returnError;
+
+        // Send SMS to parent for RETURN
+        if (student.parent_phone && destination) {
+          smsResult = await notifyParentViaSMS(
+            student.name,
+            destination,
+            student.parent_phone,
+            'return'
+          );
+          setSmsNotificationStatus(smsResult);
+        }
       }
 
-      await notifyStudentOfScan(student_id);
-      setStudentDetails({ ...student, type });
-      showAlert('Success', `Student ${type} recorded successfully!`);
+      // Send push notification to student
+      const pushNotificationSent = await notifyStudentOfScan(student_id);
+      
+      setStudentDetails({ 
+        ...student, 
+        type,
+        destination
+      });
+      
+      // Show success message with SMS status if applicable
+      let successMessage = `Student ${type} recorded successfully!`;
+      if (smsResult) {
+        if (smsResult.success) {
+          successMessage += `\n${t.smsNotificationSent}`;
+        } else {
+          successMessage += `\n${t.smsNotificationFailed}`;
+        }
+      }
+      
+      showAlert('Success', successMessage);
     } catch (error) {
       console.error('Error scanning QR code:', error);
       showAlert('Error', error.message || 'Please scan a valid QR code');
@@ -400,7 +546,7 @@ const GuardScanner = () => {
     } finally {
       setScanLoading(false);
     }
-  }, [guardDetailsLoaded, guardCollegeId]);
+  }, [guardDetailsLoaded, guardCollegeId, language]);
 
   const leaveSession = useCallback(async () => {
     try {
@@ -427,9 +573,9 @@ const GuardScanner = () => {
 
   const onLogout = async() => {
     try{
-    setLoggingOut(true);
-    await signOut();
-    setLoggingOut(false);
+      setLoggingOut(true);
+      await signOut();
+      setLoggingOut(false);
     }catch(error){
       showAlert('Error','Error occoured while logging out');
     }finally{
@@ -441,130 +587,127 @@ const GuardScanner = () => {
     setScanned(false);
     setStudentDetails(null);
     setStudentImage(null);
+    setSmsNotificationStatus(null);
     scanningRef.current = false;
   }, []);
 
-
-
   // Settings Modal Component
- // Settings Modal Component
- const SettingsModal = () => (
-  <Modal
-    visible={settingsVisible}
-    animationType="slide"
-    transparent={true}
-    onRequestClose={() => setSettingsVisible(false)}
-  >
-    <View style={styles.modalOverlay}>
-      <View style={styles.modalContent}>
-        {/* Header with Close Button */}
-        <View style={styles.modalHeader}>
-          <Text style={styles.modalTitle}>{t.settings}</Text>
-          <Pressable
-            style={styles.modalCloseButton}
-            onPress={() => setSettingsVisible(false)}
-          >
-            <MemoizedMaterialIcons name="close" size={28} color="#334155" />
-          </Pressable>
-        </View>
-        
-        {/* Scrollable Content */}
-        <ScrollView 
-          style={styles.modalScrollView}
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.modalScrollContent}
-        >
-          {/* Language Selection */}
-          <View style={styles.settingSection}>
-            <Text style={styles.settingLabel}>{t.language}</Text>
-            <View style={styles.languageButtons}>
-              <Pressable
-                style={[
-                  styles.languageButton,
-                  language === 'en' && styles.languageButtonActive
-                ]}
-                onPress={() => changeLanguage('en')}
-              >
-                <Text style={[
-                  styles.languageButtonText,
-                  language === 'en' && styles.languageButtonTextActive
-                ]}>
-                  {t.english}
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[
-                  styles.languageButton,
-                  language === 'mr' && styles.languageButtonActive
-                ]}
-                onPress={() => changeLanguage('mr')}
-              >
-                <Text style={[
-                  styles.languageButtonText,
-                  language === 'mr' && styles.languageButtonTextActive
-                ]}>
-                  {t.marathi}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-
-          {/* How to Use */}
-          <View style={styles.settingSection}>
-            <Text style={styles.settingLabel}>{t.howToUse}</Text>
-            <View style={styles.instructionsContainer}>
-              {t.instructions.map((instruction, index) => (
-                <Text key={index} style={styles.instructionText}>
-                  {instruction}
-                </Text>
-              ))}
-            </View>
-          </View>
-
-          {/* Action Buttons */}
-          {isSessionJoined && (
+  const SettingsModal = () => (
+    <Modal
+      visible={settingsVisible}
+      animationType="slide"
+      transparent={true}
+      onRequestClose={() => setSettingsVisible(false)}
+    >
+      <View style={styles.modalOverlay}>
+        <View style={styles.modalContent}>
+          {/* Header with Close Button */}
+          <View style={styles.modalHeader}>
+            <Text style={styles.modalTitle}>{t.settings}</Text>
             <Pressable
-              style={[styles.secondaryButton, leaveLoading && styles.disabledButton]}
-              onPress={()=>[
-                showAlert('Session','Do You really want to leave the session',[
-                  {text:'Yes',style:'destructive',onPress:leaveSession},
-                  {text:'Cancel',style:'cancel'}
-                ])
-              ]}
-              disabled={leaveLoading}
+              style={styles.modalCloseButton}
+              onPress={() => setSettingsVisible(false)}
             >
-              {leaveLoading ? (
-                <ActivityIndicator color="#3b82f6" />
-              ) : (
-                <Text style={styles.secondaryButtonText}>{t.leaveSession}</Text>
-              )}
+              <MemoizedMaterialIcons name="close" size={28} color="#334155" />
             </Pressable>
-          )}
+          </View>
+          
+          {/* Scrollable Content */}
+          <ScrollView 
+            style={styles.modalScrollView}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.modalScrollContent}
+          >
+            {/* Language Selection */}
+            <View style={styles.settingSection}>
+              <Text style={styles.settingLabel}>{t.language}</Text>
+              <View style={styles.languageButtons}>
+                <Pressable
+                  style={[
+                    styles.languageButton,
+                    language === 'en' && styles.languageButtonActive
+                  ]}
+                  onPress={() => changeLanguage('en')}
+                >
+                  <Text style={[
+                    styles.languageButtonText,
+                    language === 'en' && styles.languageButtonTextActive
+                  ]}>
+                    {t.english}
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.languageButton,
+                    language === 'mr' && styles.languageButtonActive
+                  ]}
+                  onPress={() => changeLanguage('mr')}
+                >
+                  <Text style={[
+                    styles.languageButtonText,
+                    language === 'mr' && styles.languageButtonTextActive
+                  ]}>
+                    {t.marathi}
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
 
-          <Pressable
-            style={[styles.dangerButton, logoutLoading && styles.disabledButton]}
-            onPress={()=>{
-              showAlert('Logout',
-                 'Do you really want to Logout?',
+            {/* How to Use */}
+            <View style={styles.settingSection}>
+              <Text style={styles.settingLabel}>{t.howToUse}</Text>
+              <View style={styles.instructionsContainer}>
+                {t.instructions.map((instruction, index) => (
+                  <Text key={index} style={styles.instructionText}>
+                    {instruction}
+                  </Text>
+                ))}
+              </View>
+            </View>
+
+            {/* Action Buttons */}
+            {isSessionJoined && (
+              <Pressable
+                style={[styles.secondaryButton, leaveLoading && styles.disabledButton]}
+                onPress={()=>[
+                  showAlert('Session','Do You really want to leave the session',[
+                    {text:'Yes',style:'destructive',onPress:leaveSession},
+                    {text:'Cancel',style:'cancel'}
+                  ])
+                ]}
+                disabled={leaveLoading}
+              >
+                {leaveLoading ? (
+                  <ActivityIndicator color="#3b82f6" />
+                ) : (
+                  <Text style={styles.secondaryButtonText}>{t.leaveSession}</Text>
+                )}
+              </Pressable>
+            )}
+
+            <Pressable
+              style={[styles.dangerButton, logoutLoading && styles.disabledButton]}
+              onPress={()=>{
+                showAlert('Logout',
+                  'Do you really want to Logout?',
                   [{text:'Yes',onPress:onLogout},
                     {text:'Cancel',style:'cancel'}
                   ]
-        
-              )
-            }}
-            disabled={logoutLoading}
-          >
-            {logoutLoading ? (
-              <ActivityIndicator color="#ffffff" />
-            ) : (
-              <Text style={styles.buttonText}>{t.logout}</Text>
-            )}
-          </Pressable>
-        </ScrollView>
+                )
+              }}
+              disabled={logoutLoading}
+            >
+              {logoutLoading ? (
+                <ActivityIndicator color="#ffffff" />
+              ) : (
+                <Text style={styles.buttonText}>{t.logout}</Text>
+              )}
+            </Pressable>
+          </ScrollView>
+        </View>
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
 
   const PermissionView = useMemo(() => (
     <SafeAreaView style={styles.container}>
@@ -617,6 +760,17 @@ const GuardScanner = () => {
             <Text style={styles.detailLabel}>{t.department}:</Text>
             <Text style={styles.detailValue}>{studentDetails.department || 'Computer Technology'}</Text>
           </View>
+          
+          {/* Add Destination Row */}
+          {studentDetails.destination && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>{t.destination}:</Text>
+              <Text style={styles.destinationValue}>
+                {studentDetails.destination}
+              </Text>
+            </View>
+          )}
+          
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t.action}:</Text>
             <Text style={[
@@ -627,6 +781,19 @@ const GuardScanner = () => {
               {studentDetails.type === 'exit' ? t.goingHome : t.returning}
             </Text>
           </View>
+
+          {/* SMS Notification Status */}
+          {smsNotificationStatus && (
+            <View style={styles.detailRow}>
+              <Text style={styles.detailLabel}>SMS:</Text>
+              <Text style={[
+                styles.detailValue,
+                smsNotificationStatus.success ? styles.smsSuccess : styles.smsError
+              ]}>
+                {smsNotificationStatus.success ? t.parentNotified : t.parentNotificationFailed}
+              </Text>
+            </View>
+          )}
         </View>
         
         <Pressable
@@ -637,7 +804,7 @@ const GuardScanner = () => {
         </Pressable>
       </View>
     );
-  }, [studentDetails, studentImage, handleScanAgain, language]);
+  }, [studentDetails, studentImage, smsNotificationStatus, handleScanAgain, language]);
 
   if (!permission) {
     return <View />; 
@@ -665,12 +832,12 @@ const GuardScanner = () => {
   if (loggingOut) {
     return (
       <ScreenWrapper>
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-        <View style={{ flexDirection: 'column', alignItems: 'center', gap: 15 }}>
-          <Text style={{ fontSize: 19 }}>Logging Out</Text>
-          <ActivityIndicator size={50} color="#3b82f6" />
+        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+          <View style={{ flexDirection: 'column', alignItems: 'center', gap: 15 }}>
+            <Text style={{ fontSize: 19 }}>Logging Out</Text>
+            <ActivityIndicator size={50} color="#3b82f6" />
+          </View>
         </View>
-      </View>
       </ScreenWrapper>
     );
   }
@@ -687,10 +854,10 @@ const GuardScanner = () => {
               onPress={() => setSettingsVisible(true)}
             >
               <MemoizedMaterialIcons 
-                                name="settings" 
-                                size={24} 
-                                color={'#fff'} 
-                              />
+                name="settings" 
+                size={24} 
+                color={'#fff'} 
+              />
             </Pressable>
           </View>
         </LinearGradient>
@@ -766,13 +933,13 @@ const GuardScanner = () => {
 
         <SettingsModal />
         <CustomAlert 
-        visible={customAlert.visible}
-        title={customAlert.title}
-        message={customAlert.message}
-        buttons={customAlert.buttons}
-        onDismiss={()=>{
-          setCustomAlert({visible:false,title:'',message:'',buttons:[]});
-        }}
+          visible={customAlert.visible}
+          title={customAlert.title}
+          message={customAlert.message}
+          buttons={customAlert.buttons}
+          onDismiss={()=>{
+            setCustomAlert({visible:false,title:'',message:'',buttons:[]});
+          }}
         />
       </SafeAreaView>
     </ScreenWrapper>
@@ -1001,6 +1168,21 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
+  destinationValue: {
+    fontSize: 16,
+    color: '#3b82f6',
+    fontWeight: '500',
+    flex: 1,
+    fontStyle: 'italic',
+  },
+  smsSuccess: {
+    color: '#10b981',
+    fontWeight: '600',
+  },
+  smsError: {
+    color: '#ef4444',
+    fontWeight: '600',
+  },
   statusBadge: {
     paddingVertical: 4,
     paddingHorizontal: 10,
@@ -1042,12 +1224,27 @@ const styles = StyleSheet.create({
     padding: 25,
     maxHeight: '85%',
   },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#334155',
-    marginBottom: 20,
+    flex: 1,
     textAlign: 'center',
+  },
+  modalCloseButton: {
+    marginBottom: 10,
+  },
+  modalScrollView: {
+    flex: 1,
+  },
+  modalScrollContent: {
+    paddingBottom: 20,
   },
   settingSection: {
     marginBottom: 25,
@@ -1094,19 +1291,4 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     lineHeight: 22,
   },
-  closeButton: {
-    backgroundColor: '#f1f5f9',
-    borderRadius: 10,
-    padding: 15,
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  closeButtonText: {
-    color: '#334155',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  modalCloseButton:{
-    marginBottom:10
-  }
 });

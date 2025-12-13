@@ -288,10 +288,12 @@ export const AuthProvider = ({ children }) => {
   };
 
 
-  const signIn = useCallback(async (phone, password) => {
+  const signIn = useCallback(async (phone, passwordOrOtp, isOtpFlow = false) => {
     setIsLoadingAuth(true);
+    
     try {
-   let existingDeviceId = null;
+      // Check active sessions for both OTP and password flows
+      let existingDeviceId = null;
       const { data: existingSessions, error: sessionError } = await supabase
         .from('active_sessions')
         .select('*')
@@ -301,16 +303,15 @@ export const AuthProvider = ({ children }) => {
         console.error('Error checking active sessions:', sessionError.message);
       }
   
-  if(existingSessions){
-      if(Platform.OS == 'android'){
-        existingDeviceId =  Application.getAndroidId();
+      if (existingSessions) {
+        if (Platform.OS === 'android') {
+          existingDeviceId = Application.getAndroidId();
+        } else if (Platform.OS === 'ios') {
+          existingDeviceId = await Application.getIosIdForVendorAsync();
+        }
       }
-      else if(Platform.OS == 'ios'){
-        existingDeviceId = await Application.getIosIdForVendorAsync();
-      }
-    }
-
-      if (existingSessions && existingSessions.length > 0 && (existingSessions[0]?.device_id!=existingDeviceId)) {
+  
+      if (existingSessions && existingSessions.length > 0 && (existingSessions[0]?.device_id !== existingDeviceId)) {
         showAlert(
           'Already Logged In',
           'Your account is already logged in on another device. Please log out there first.',
@@ -320,53 +321,123 @@ export const AuthProvider = ({ children }) => {
         return null;
       }
   
-
-      const { data, error } = await supabase.auth.signInWithPassword({
-        phone,
-        password,
-      });
+      // Handle OTP flow
+      if (isOtpFlow) {
+        // If no password/OTP provided, send OTP
+        if (!passwordOrOtp) {
+          const { data, error } = await supabase.auth.signInWithOtp({
+            phone,
+            options: {
+              shouldCreateUser: false, // Don't create new user for forgot password
+            },
+          });
   
-      if (error) {
-        showAlert('Error', 'Enter valid credentials', [{ text: 'OK' }]);
-        setIsLoadingAuth(false);
-        return null;
+          if (error) {
+            showAlert('Error', error.message || 'Failed to send OTP', [{ text: 'OK' }]);
+            setIsLoadingAuth(false);
+            return { otpSent: false, error: error.message };
+          }
+  
+          setIsLoadingAuth(false);
+          return { otpSent: true };
+        }
+        // If OTP is provided, verify it
+        else {
+          const { data, error } = await supabase.auth.verifyOtp({
+            phone,
+            token: passwordOrOtp,
+            type: 'sms',
+          });
+  
+          if (error) {
+            showAlert('Error', 'Invalid OTP. Please try again.', [{ text: 'OK' }]);
+            setIsLoadingAuth(false);
+            return null;
+          }
+  
+          // OTP verified successfully, create session record
+          if (data.session) {
+            let deviceId = null;
+  
+            if (Platform.OS === 'android') {
+              deviceId = Application.getAndroidId();
+            } else if (Platform.OS === 'ios') {
+              deviceId = await Application.getIosIdForVendorAsync();
+            }
+  
+            await supabase.from('active_sessions').insert({
+              user_id: data.user.id,
+              phone,
+              session_id: data.session.id,
+              device_id: deviceId,
+              created_at: new Date(),
+            });
+          }
+  
+          console.log('OTP verification successful, fetching user profile...');
+          const userData = await fetchUserProfile(data.user);
+  
+          console.log('Saving user data to cache...');
+          await Promise.allSettled([
+            saveUserRole(userData.role),
+            saveUserData(userData),
+          ]);
+  
+          console.log('Sign in complete');
+          return userData;
+        }
       }
-  
-    
-      if (data.session) {
-
-        let deviceId = null;
-
-        if (Platform.OS === 'android') {
-          deviceId =  Application.getAndroidId();
-        } else if (Platform.OS === 'ios') {
-          deviceId = await Application.getIosIdForVendorAsync();
+      // Handle password flow (original logic)
+      else {
+        if (!passwordOrOtp) {
+          showAlert('Error', 'Password is required', [{ text: 'OK' }]);
+          setIsLoadingAuth(false);
+          return null;
         }
   
-        await supabase.from('active_sessions').insert({
-          user_id: data.user.id,
+        const { data, error } = await supabase.auth.signInWithPassword({
           phone,
-          session_id: data.session.id,
-          device_id: deviceId,
-          created_at: new Date(),
+          password: passwordOrOtp,
         });
+  
+        if (error) {
+          showAlert('Error', 'Enter valid credentials', [{ text: 'OK' }]);
+          setIsLoadingAuth(false);
+          return null;
+        }
+  
+        if (data.session) {
+          let deviceId = null;
+  
+          if (Platform.OS === 'android') {
+            deviceId = Application.getAndroidId();
+          } else if (Platform.OS === 'ios') {
+            deviceId = await Application.getIosIdForVendorAsync();
+          }
+  
+          await supabase.from('active_sessions').insert({
+            user_id: data.user.id,
+            phone,
+            session_id: data.session.id,
+            device_id: deviceId,
+            created_at: new Date(),
+          });
+        }
+  
+        console.log('Authentication successful, fetching user profile...');
+        const userData = await fetchUserProfile(data.user);
+  
+        console.log('Saving user data to cache...');
+        await Promise.allSettled([
+          saveUserRole(userData.role),
+          saveUserData(userData),
+        ]);
+  
+        console.log('Sign in complete');
+        return userData;
       }
-
-      console.log(' Authentication successful, fetching user profile...');
-      const userData = await fetchUserProfile(data.user);
-  
-
-      console.log(' Saving user data to cache...');
-      await Promise.allSettled([
-        saveUserRole(userData.role),
-        saveUserData(userData),
-      ]);
-  
-      console.log(' Sign in complete');
-      return userData;
-  
     } catch (error) {
-      console.error(' Sign in error:', error);
+      console.error('Sign in error:', error);
       showAlert('Error', 'Something went wrong. Please try again.', [{ text: 'OK' }]);
       throw error;
     } finally {

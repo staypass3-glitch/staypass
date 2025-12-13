@@ -11,7 +11,6 @@ import {
   TouchableOpacity,
   View
 } from 'react-native';
-import saveImage from './saveImage';
 
 
 const { width } = Dimensions.get('window');
@@ -102,28 +101,7 @@ const verifyOTP = async (otpCode) => {
 
     if (authError) throw authError;
     
-    console.log('User created:', user.id);
-    console.log('Profile image URI:', formData.profileImage);
-    
-   let imageUrl = await saveImage('profile',formData.profileImage)
-    
-    // Create profiles
-    const { error: profileError } = await supabase.from('profiles').insert([
-      {
-        id: user.id,
-        role: formData.role,
-        name: formData.name,
-        phone_number: formData.phone,
-        room_number: formData.role === 'student' ? formData.roomNumber : null,
-        department: formData.role === 'admin' ? formData.department : null,
-        shift_schedule: formData.role === 'guard' ? formData.shift : null,
-        parent_phone: formData.role === 'student' ? formData.parentPhone : null,
-        is_approved: formData.role === 'admin' ? false : true,
-        profile_image: imageUrl || null,
-      },
-    ]);
-
-    if (profileError) throw profileError;
+ 
 
     // Success
     navigation.navigate('SignIn');

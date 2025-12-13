@@ -8,7 +8,6 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useCallback, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Dimensions,
   Image,
   Keyboard,
@@ -19,6 +18,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 
@@ -84,102 +84,9 @@ const SignUpScreen = () => {
     return password.length >= 6;
   };
 
-  const validateField = (fieldName, value) => {
-    const newErrors = { ...errors };
-    
-    switch (fieldName) {
-      case 'name':
-        if (!value.trim()) {
-          newErrors.name = 'Name is required';
-        } else if (value.trim().length < 2) {
-          newErrors.name = 'Name must be at least 2 characters long';
-        } else {
-          delete newErrors.name;
-        }
-        break;
-
-      case 'email':
-        if (!value.trim()) {
-          newErrors.email = 'Email is required';
-        } else if (!validateEmail(value)) {
-          newErrors.email = 'Please enter a valid email address';
-        } else {
-          delete newErrors.email;
-        }
-        break;
-
-      case 'password':
-        if (!value) {
-          newErrors.password = 'Password is required';
-        } else if (!validatePassword(value)) {
-          newErrors.password = 'Password must be at least 6 characters long';
-        } else {
-          delete newErrors.password;
-        }
-        break;
-
-      case 'phone':
-        if (!value.trim()) {
-          newErrors.phone = 'Phone number is required';
-        } else if (!validatePhone(value)) {
-          newErrors.phone = 'Please enter a valid 10-digit phone number';
-        } else {
-          delete newErrors.phone;
-        }
-        break;
-
-      case 'roomNumber':
-        if (role === 'student' && !value.trim()) {
-          newErrors.roomNumber = 'Room number is required for students';
-        } else {
-          delete newErrors.roomNumber;
-        }
-        break;
-
-      case 'parentPhone':
-        if (role === 'student' && !value.trim()) {
-          newErrors.parentPhone = "Parent's phone number is required for students";
-        } else if (role === 'student' && value.trim() && !validatePhone(value)) {
-          newErrors.parentPhone = 'Please enter a valid 10-digit parent phone number';
-        } else {
-          delete newErrors.parentPhone;
-        }
-        break;
-
-      case 'department':
-        if ((role === 'admin' || role === 'student') && !value.trim()) {
-          newErrors.department = 'Department is required';
-        } else {
-          delete newErrors.department;
-        }
-        break;
-
-      case 'shift':
-        if (role === 'guard' && !value.trim()) {
-          newErrors.shift = 'Shift information is required for guards';
-        } else {
-          delete newErrors.shift;
-        }
-        break;
-
-      case 'profileImage':
-        if (!value) {
-          newErrors.profileImage = 'Profile photo is required';
-        } else {
-          delete newErrors.profileImage;
-        }
-        break;
-
-      default:
-        break;
-    }
-
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
   const validateAllFields = () => {
     const newErrors = {};
+    const hasSubmitted = Object.keys(touched).length > 0;
 
     // Basic required fields for all roles
     if (!formData.name.trim()) newErrors.name = 'Name is required';
@@ -232,8 +139,9 @@ const SignUpScreen = () => {
       [fieldName]: cleaned
     }));
 
-    if (touched[fieldName]) {
-      validateField(fieldName, cleaned);
+    // Only validate if form has been submitted
+    if (Object.keys(touched).length > 0) {
+      validateAllFields();
     }
   };
 
@@ -243,24 +151,17 @@ const SignUpScreen = () => {
       [fieldName]: value
     }));
 
-    if (touched[fieldName]) {
-      validateField(fieldName, value);
+    // Only validate if form has been submitted
+    if (Object.keys(touched).length > 0) {
+      validateAllFields();
     }
-  };
-
-  const handleFieldBlur = (fieldName) => {
-    setTouched(prev => ({
-      ...prev,
-      [fieldName]: true
-    }));
-    validateField(fieldName, formData[fieldName]);
   };
 
   const pickImage = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant camera roll permissions to select a profile photo.');
+        showAlert('Permission Required', 'Please grant camera roll permissions to select a profile photo.');
         return;
       }
 
@@ -273,10 +174,13 @@ const SignUpScreen = () => {
 
       if (!result.canceled && result.assets[0]) {
         setFormData({ ...formData, profileImage: result.assets[0].uri });
-        validateField('profileImage', result.assets[0].uri);
+        // Only validate if form has been submitted
+        if (Object.keys(touched).length > 0) {
+          validateAllFields();
+        }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to pick image. Please try again.');
+      showAlert('Error', 'Failed to pick image. Please try again.');
     }
   };
 
@@ -284,7 +188,7 @@ const SignUpScreen = () => {
     try {
       const { status } = await ImagePicker.requestCameraPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission Required', 'Please grant camera permissions to take a photo.');
+        showAlert('Permission Required', 'Please grant camera permissions to take a photo.');
         return;
       }
 
@@ -296,10 +200,13 @@ const SignUpScreen = () => {
 
       if (!result.canceled && result.assets[0]) {
         setFormData({ ...formData, profileImage: result.assets[0].uri });
-        validateField('profileImage', result.assets[0].uri);
+        // Only validate if form has been submitted
+        if (Object.keys(touched).length > 0) {
+          validateAllFields();
+        }
       }
     } catch (error) {
-      Alert.alert('Error', 'Failed to take picture. Please try again.');
+      showAlert('Error', 'Failed to take picture. Please try again.');
     }
   };
 
@@ -321,7 +228,7 @@ const SignUpScreen = () => {
 
   const handleSignUp = async () => {
     try {
-      // Mark all fields as touched to show errors
+      // Mark all fields as touched to trigger validation and red borders
       const allFields = ['name', 'email', 'password', 'phone', 'profileImage'];
       if (role === 'student') allFields.push('roomNumber', 'parentPhone', 'department');
       if (role === 'admin') allFields.push('department');
@@ -333,9 +240,9 @@ const SignUpScreen = () => {
       });
       setTouched(newTouched);
 
-      // Validate all fields
+      // Validate all fields - this will set errors and trigger red borders
       if (!validateAllFields()) {
-        Alert.alert('Validation Error', 'Please fix all errors before submitting.');
+        showAlert('Validation Error', 'Please fill all required fields correctly.');
         return;
       }
 
@@ -368,7 +275,7 @@ const SignUpScreen = () => {
       const { data: signUpData, error: signUpError } = await signIn(completeFormData.phone, completeFormData.password);
       if (signUpError) throw signUpError;
     } catch (error) {
-      Alert.alert('Registration Failed', error.message);
+      showAlert('Registration Failed', error.message);
     } finally {
       setLoading(false);
     }
@@ -387,11 +294,9 @@ const SignUpScreen = () => {
     Keyboard.dismiss();
   };
 
-  const renderError = (fieldName) => {
-    if (errors[fieldName] && touched[fieldName]) {
-      return <Text style={styles.errorText}>{errors[fieldName]}</Text>;
-    }
-    return null;
+  // Helper function to check if a field should show error border
+  const shouldShowError = (fieldName) => {
+    return errors[fieldName] && Object.keys(touched).length > 0;
   };
 
   const renderPhoneInput = (fieldName, placeholder, value) => (
@@ -403,12 +308,8 @@ const SignUpScreen = () => {
         placeholder={placeholder}
         value={value}
         onChangeText={(text) => handlePhoneChange(fieldName, text)}
-        onBlur={() => handleFieldBlur(fieldName)}
         keyboardType="phone-pad"
-        style={[
-          styles.phoneInput,
-          errors[fieldName] && touched[fieldName] && styles.errorInput
-        ]}
+        style={styles.phoneInput}
         placeholderTextColor="#999"
         returnKeyType="next"
         blurOnSubmit={false}
@@ -418,259 +319,291 @@ const SignUpScreen = () => {
   );
 
   return (
-    <View style={{flex:1}}>
-   
+    <View style={styles.container}>
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={styles.keyboardAvoidingView}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        keyboardVerticalOffset={0}
       >
-        <LinearGradient
-          colors={['#2563eb', '#3b82f6', '#60a5fa']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.gradient}
+        <ScrollView
+          ref={scrollViewRef}
+          style={styles.scrollView}
+          contentContainerStyle={styles.scrollViewContent}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={true}
+          scrollEventThrottle={16}
+          nestedScrollEnabled={true}
         >
-          <View style={styles.header}>
-            <Text style={styles.welcomeSmall}>Welcome to</Text>
-            <Text style={styles.welcome}>StayPass</Text>
-            <View style={styles.roleSelector}>
-              <MaterialIcons name={getRoleIcon()} size={24} color="#fff" style={styles.headerIcon} />
-              <Text style={styles.roleText}>{role.charAt(0).toUpperCase() + role.slice(1)} Registration</Text>
-            </View>
-          </View>
-        </LinearGradient>
+          <TouchableWithoutFeedback onPress={dismissKeyboard}>
+            <View>
+              <LinearGradient
+                colors={['#2563eb', '#3b82f6', '#60a5fa']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.gradient}
+              >
+                <View style={styles.header}>
+                  <Text style={styles.welcomeSmall}>Welcome to</Text>
+                  <Text style={styles.welcome}>StayPass</Text>
+                  <View style={styles.roleSelector}>
+                    <MaterialIcons name={getRoleIcon()} size={24} color="#fff" style={styles.headerIcon} />
+                    <Text style={styles.roleText}>{role.charAt(0).toUpperCase() + role.slice(1)} Registration</Text>
+                  </View>
+                </View>
+              </LinearGradient>
 
-        <View style={styles.cardContainer}>
-          <View style={styles.card}>
-            <ScrollView
-              ref={scrollViewRef}
-              contentContainerStyle={styles.formContainer}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
-              bounces={true}
-            >
-              {/* Profile Photo Section */}
-              <View style={styles.profilePhotoContainer}>
-                <Text style={styles.profilePhotoLabel}>Profile Photo *</Text>
-                <TouchableOpacity
-                  style={[
-                    styles.profilePhotoButton,
-                    errors.profileImage && touched.profileImage && styles.errorBorder
-                  ]}
-                  onPress={showImagePicker}
-                  activeOpacity={0.7}
-                >
-                  {formData.profileImage ? (
-                    <Image source={{ uri: formData.profileImage }} style={styles.profileImage} />
-                  ) : (
-                    <View style={styles.profilePlaceholder}>
-                      <MaterialIcons name="add-a-photo" size={40} color="#4158D0" />
-                      <Text style={styles.profilePlaceholderText}>Add Photo</Text>
+              <View style={styles.cardContainer}>
+                <View style={styles.card}>
+                  <View style={styles.formContainer}>
+                    {/* Profile Photo Section */}
+                    <View style={styles.profilePhotoContainer}>
+                      <Text style={styles.profilePhotoLabel}>Profile Photo *</Text>
+                      <TouchableOpacity
+                        style={[
+                          styles.profilePhotoButton,
+                          shouldShowError('profileImage') && styles.errorBorder
+                        ]}
+                        onPress={showImagePicker}
+                        activeOpacity={0.7}
+                      >
+                        {formData.profileImage ? (
+                          <Image source={{ uri: formData.profileImage }} style={styles.profileImage} />
+                        ) : (
+                          <View style={styles.profilePlaceholder}>
+                            <MaterialIcons name="add-a-photo" size={40} color="#4158D0" />
+                            <Text style={styles.profilePlaceholderText}>Add Photo</Text>
+                          </View>
+                        )}
+                      </TouchableOpacity>
                     </View>
-                  )}
-                </TouchableOpacity>
-                {renderError('profileImage')}
-              </View>
 
-              <View style={styles.pickerContainer}>
-                <Text style={styles.pickerLabel}>Select Your Role *</Text>
-                <View style={styles.pickerWrapper}>
-                  <Picker
-                    selectedValue={role}
-                    onValueChange={setRole}
-                    style={styles.picker}
-                    dropdownIconColor="#4158D0"
-                    mode="dropdown"
-                  >
-                    <Picker.Item label="Student" value="student" />
-                    <Picker.Item label="Guard" value="guard" style={{marginLeft:20}} />
-                    <Picker.Item label="Admin" value="admin" />
-                  </Picker>
+                    {/* Role Picker with spacing */}
+                    <View style={styles.fieldSpacing}>
+                      <Text style={styles.pickerLabel}>Select Your Role *</Text>
+                      <View style={[
+                        styles.pickerWrapper,
+                        shouldShowError('role') && styles.errorBorder
+                      ]}>
+                        <Picker
+                          selectedValue={role}
+                          onValueChange={(value) => {
+                            setRole(value);
+                            // Reset role-specific fields when role changes
+                            if (value !== 'student') {
+                              setFormData(prev => ({
+                                ...prev,
+                                roomNumber: '',
+                                parentPhone: '',
+                              }));
+                            }
+                            if (value !== 'guard') {
+                              setFormData(prev => ({ ...prev, shift: '' }));
+                            }
+                            if (value !== 'admin' && value !== 'student') {
+                              setFormData(prev => ({ ...prev, department: '' }));
+                            }
+                            // Revalidate if form was already submitted
+                            if (Object.keys(touched).length > 0) {
+                              validateAllFields();
+                            }
+                          }}
+                          style={styles.picker}
+                          dropdownIconColor="#4158D0"
+                          mode="dropdown"
+                        >
+                          <Picker.Item label="Student" value="student" />
+                          <Picker.Item label="Guard" value="guard" />
+                          <Picker.Item label="Admin" value="admin" />
+                        </Picker>
+                      </View>
+                    </View>
+
+                    {/* Input Fields with spacing */}
+                    <View style={styles.fieldSpacing}>
+                      <View style={[
+                        styles.inputContainer,
+                        shouldShowError('name') && styles.errorBorder
+                      ]}>
+                        <MaterialIcons name="person" size={20} color="#666" style={styles.icon} />
+                        <TextInput
+                          placeholder="Full Name *"
+                          value={formData.name}
+                          onChangeText={(text) => handleFieldChange('name', text)}
+                          style={styles.input}
+                          placeholderTextColor="#999"
+                          returnKeyType="next"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.fieldSpacing}>
+                      <View style={[
+                        styles.inputContainer,
+                        shouldShowError('email') && styles.errorBorder
+                      ]}>
+                        <MaterialIcons name="email" size={20} color="#666" style={styles.icon} />
+                        <TextInput
+                          placeholder="Email *"
+                          value={formData.email}
+                          onChangeText={(text) => handleFieldChange('email', text)}
+                          keyboardType="email-address"
+                          autoCapitalize="none"
+                          style={styles.input}
+                          placeholderTextColor="#999"
+                          returnKeyType="next"
+                        />
+                      </View>
+                    </View>
+
+                    <View style={styles.fieldSpacing}>
+                      <View style={[
+                        styles.inputContainer,
+                        shouldShowError('password') && styles.errorBorder
+                      ]}>
+                        <MaterialIcons name="lock" size={20} color="#666" style={styles.icon} />
+                        <TextInput
+                          placeholder="Password *"
+                          value={formData.password}
+                          onChangeText={(text) => handleFieldChange('password', text)}
+                          secureTextEntry={secureTextEntry}
+                          style={styles.input}
+                          placeholderTextColor="#999"
+                          returnKeyType="next"
+                        />
+                        <TouchableOpacity onPress={togglePasswordVisibility} style={styles.eyeIcon}>
+                          <MaterialIcons 
+                            name={!secureTextEntry ? "visibility" : "visibility-off"} 
+                            size={20} 
+                            color="#999" 
+                          />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+
+                    <View style={styles.fieldSpacing}>
+                      <View style={[
+                        styles.inputContainer,
+                        shouldShowError('phone') && styles.errorBorder
+                      ]}>
+                        <MaterialIcons name="phone" size={20} color="#666" style={styles.icon} />
+                        {renderPhoneInput('phone', 'Student Phone', formData.phone)}
+                      </View>
+                    </View>
+
+                    {role === 'student' && (
+                      <>
+                        <View style={styles.fieldSpacing}>
+                          <View style={[
+                            styles.inputContainer,
+                            shouldShowError('roomNumber') && styles.errorBorder
+                          ]}>
+                            <MaterialIcons name="meeting-room" size={20} color="#666" style={styles.icon} />
+                            <TextInput
+                              placeholder="Room Number *"
+                              value={formData.roomNumber}
+                              onChangeText={(text) => handleFieldChange('roomNumber', text)}
+                              style={styles.input}
+                              placeholderTextColor="#999"
+                              returnKeyType="next"
+                            />
+                          </View>
+                        </View>
+
+                        <View style={styles.fieldSpacing}>
+                          <View style={[
+                            styles.inputContainer,
+                            shouldShowError('parentPhone') && styles.errorBorder
+                          ]}>
+                            <MaterialIcons name="contact-phone" size={20} color="#666" style={styles.icon} />
+                            {renderPhoneInput('parentPhone', "Parent's Phone", formData.parentPhone)}
+                          </View>
+                        </View>
+                      </>
+                    )}
+
+                    {(role === 'admin' || role === 'student') && (
+                      <View style={styles.fieldSpacing}>
+                        <View style={[
+                          styles.inputContainer,
+                          shouldShowError('department') && styles.errorBorder
+                        ]}>
+                          <MaterialIcons name="business" size={20} color="#666" style={styles.icon} />
+                          <TextInput
+                            placeholder="Department *"
+                            value={formData.department}
+                            onChangeText={(text) => handleFieldChange('department', text)}
+                            style={styles.input}
+                            placeholderTextColor="#999"
+                            returnKeyType="next"
+                          />
+                        </View>
+                      </View>
+                    )}
+
+                    {role === 'guard' && (
+                      <View style={styles.fieldSpacing}>
+                        <View style={[
+                          styles.inputContainer,
+                          shouldShowError('shift') && styles.errorBorder
+                        ]}>
+                          <MaterialIcons name="schedule" size={20} color="#666" style={styles.icon} />
+                          <TextInput
+                            placeholder="Shift Schedule (e.g., Morning 8-4) *"
+                            value={formData.shift}
+                            onChangeText={(text) => handleFieldChange('shift', text)}
+                            style={styles.input}
+                            placeholderTextColor="#999"
+                            returnKeyType="done"
+                          />
+                        </View>
+                      </View>
+                    )}
+
+                    <TouchableOpacity
+                      style={[styles.button, loading && styles.buttonDisabled]}
+                      onPress={handleSignUp}
+                      disabled={loading}
+                      activeOpacity={0.8}
+                    >
+                      {loading ? (
+                        <ActivityIndicator color="#fff" />
+                      ) : (
+                        <>
+                          <MaterialIcons name="app-registration" size={20} color="#fff" style={styles.buttonIcon} />
+                          <Text style={styles.buttonText}>Complete Registration</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                      style={styles.loginLink}
+                      onPress={() => navigation.navigate('SignIn')}
+                      activeOpacity={0.7}
+                    >
+                      <Text style={styles.loginText}>Already have an account? </Text>
+                      <Text style={styles.loginLinkText}>Sign In</Text>
+                    </TouchableOpacity>
+                  </View>
                 </View>
               </View>
-
-              <View style={styles.inputContainer}>
-                <MaterialIcons name="person" size={20} color="#666" style={styles.icon} />
-                <TextInput
-                  placeholder="Full Name *"
-                  value={formData.name}
-                  onChangeText={(text) => handleFieldChange('name', text)}
-                  onBlur={() => handleFieldBlur('name')}
-                  style={[
-                    styles.input,
-                    errors.name && touched.name && styles.errorInput
-                  ]}
-                  placeholderTextColor="#999"
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                />
-              </View>
-              {renderError('name')}
-
-              <View style={styles.inputContainer}>
-                <MaterialIcons name="email" size={20} color="#666" style={styles.icon} />
-                <TextInput
-                  placeholder="Email *"
-                  value={formData.email}
-                  onChangeText={(text) => handleFieldChange('email', text)}
-                  onBlur={() => handleFieldBlur('email')}
-                  keyboardType="email-address"
-                  autoCapitalize="none"
-                  style={[
-                    styles.input,
-                    errors.email && touched.email && styles.errorInput
-                  ]}
-                  placeholderTextColor="#999"
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                />
-              </View>
-              {renderError('email')}
-
-              <View style={styles.inputContainer}>
-                <MaterialIcons name="lock" size={20} color="#666" style={styles.icon} />
-                <TextInput
-                  placeholder="Password *"
-                  value={formData.password}
-                  onChangeText={(text) => handleFieldChange('password', text)}
-                  onBlur={() => handleFieldBlur('password')}
-                  secureTextEntry={secureTextEntry}
-                  style={[
-                    styles.input,
-                    errors.password && touched.password && styles.errorInput
-                  ]}
-                  placeholderTextColor="#999"
-                  returnKeyType="next"
-                  blurOnSubmit={false}
-                />
-                <TouchableOpacity onPress={togglePasswordVisibility} style={styles.eyeIcon}>
-                  <MaterialIcons 
-                    name={!secureTextEntry ? "visibility" : "visibility-off"} 
-                    size={20} 
-                    color="#999" 
-                  />
-                </TouchableOpacity>
-              </View>
-              {renderError('password')}
-
-              <View style={styles.inputContainer}>
-                <MaterialIcons name="phone" size={20} color="#666" style={styles.icon} />
-                {renderPhoneInput('phone', '10-digit phone number *', formData.phone)}
-              </View>
-              {renderError('phone')}
-
-              {role === 'student' && (
-                <>
-                  <View style={styles.inputContainer}>
-                    <MaterialIcons name="meeting-room" size={20} color="#666" style={styles.icon} />
-                    <TextInput
-                      placeholder="Room Number *"
-                      value={formData.roomNumber}
-                      onChangeText={(text) => handleFieldChange('roomNumber', text)}
-                      onBlur={() => handleFieldBlur('roomNumber')}
-                      style={[
-                        styles.input,
-                        errors.roomNumber && touched.roomNumber && styles.errorInput
-                      ]}
-                      placeholderTextColor="#999"
-                      returnKeyType="next"
-                      blurOnSubmit={false}
-                    />
-                  </View>
-                  {renderError('roomNumber')}
-
-                  <View style={styles.inputContainer}>
-                    <MaterialIcons name="contact-phone" size={20} color="#666" style={styles.icon} />
-                    {renderPhoneInput('parentPhone', "Parent's 10-digit phone number *", formData.parentPhone)}
-                  </View>
-                  {renderError('parentPhone')}
-                </>
-              )}
-
-              {(role === 'admin' || role === 'student') && (
-                <>
-                  <View style={styles.inputContainer}>
-                    <MaterialIcons name="business" size={20} color="#666" style={styles.icon} />
-                    <TextInput
-                      placeholder="Department *"
-                      value={formData.department}
-                      onChangeText={(text) => handleFieldChange('department', text)}
-                      onBlur={() => handleFieldBlur('department')}
-                      style={[
-                        styles.input,
-                        errors.department && touched.department && styles.errorInput
-                      ]}
-                      placeholderTextColor="#999"
-                      returnKeyType="done"
-                    />
-                  </View>
-                  {renderError('department')}
-                </>
-              )}
-
-              {role === 'guard' && (
-                <>
-                  <View style={styles.inputContainer}>
-                    <MaterialIcons name="schedule" size={20} color="#666" style={styles.icon} />
-                    <TextInput
-                      placeholder="Shift Schedule (e.g., Morning 8-4) *"
-                      value={formData.shift}
-                      onChangeText={(text) => handleFieldChange('shift', text)}
-                      onBlur={() => handleFieldBlur('shift')}
-                      style={[
-                        styles.input,
-                        errors.shift && touched.shift && styles.errorInput
-                      ]}
-                      placeholderTextColor="#999"
-                      returnKeyType="done"
-                    />
-                  </View>
-                  {renderError('shift')}
-                </>
-              )}
-
-              <TouchableOpacity
-                style={styles.button}
-                onPress={handleSignUp}
-                disabled={loading}
-                activeOpacity={0.8}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" />
-                ) : (
-                  <>
-                    <MaterialIcons name="app-registration" size={20} color="#fff" style={styles.buttonIcon} />
-                    <Text style={styles.buttonText}>Complete Registration</Text>
-                  </>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.loginLink}
-                onPress={() => navigation.navigate('SignIn')}
-                activeOpacity={0.7}
-              >
-                <Text style={styles.loginText}>Already have an account? </Text>
-                <Text style={styles.loginLinkText}>Sign In</Text>
-              </TouchableOpacity>
-            </ScrollView>
-          </View>
-
-          <ImagePickerAlert
-            visible={customAlert.visible}
-            title={customAlert.title}
-            message={customAlert.message}
-            buttons={customAlert.buttons}
-            onDismiss={() => setCustomAlert({ 
-              visible: false, 
-              title: '', 
-              message: '', 
-              buttons: [] 
-            })}
-          />
-        </View>
+            </View>
+          </TouchableWithoutFeedback>
+        </ScrollView>
       </KeyboardAvoidingView>
+
+      <ImagePickerAlert
+        visible={customAlert.visible}
+        title={customAlert.title}
+        message={customAlert.message}
+        buttons={customAlert.buttons}
+        onDismiss={() => setCustomAlert({ 
+          visible: false, 
+          title: '', 
+          message: '', 
+          buttons: [] 
+        })}
+      />
     </View>
   );
 };
@@ -683,13 +616,20 @@ const styles = StyleSheet.create({
   keyboardAvoidingView: {
     flex: 1,
   },
+  scrollView: {
+    flex: 1,
+  },
+  scrollViewContent: {
+    flexGrow: 1,
+    paddingBottom: Platform.OS === 'ios' ? 40 : 20,
+  },
   gradient: {
-    minHeight: SCREEN_HEIGHT * 0.22,
+    height: SCREEN_HEIGHT * 0.22,
     paddingBottom: 20,
   },
   header: {
     paddingHorizontal: 25,
-    paddingTop: '13%',
+    paddingTop: Platform.OS === 'ios' ? '15%' : '10%',
   },
   welcomeSmall: {
     fontSize: 16,
@@ -713,7 +653,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     borderRadius: 20,
     alignSelf: 'flex-start',
-    marginBottom:'5%'
+    marginBottom: '5%'
   },
   roleText: {
     color: 'white',
@@ -724,13 +664,11 @@ const styles = StyleSheet.create({
     marginRight: 5,
   },
   cardContainer: {
-    flex: 1,
-    marginTop: -30,
+    marginTop: -20,
     paddingHorizontal: 20,
     paddingBottom: 20,
   },
   card: {
-    flex: 1,
     backgroundColor: 'white',
     borderRadius: 15,
     padding: 20,
@@ -739,14 +677,16 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 10,
+    marginBottom: 20,
   },
   formContainer: {
-    paddingVertical: 20,
-    paddingBottom: 40,
+    paddingBottom: 20,
+    paddingTop: 10,
   },
   profilePhotoContainer: {
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 25,
+    marginTop: 10,
   },
   profilePhotoLabel: {
     fontSize: 14,
@@ -793,36 +733,21 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#e0e0e0',
     borderRadius: 10,
-    overflow: Platform.OS === 'android' ? 'hidden' : 'visible',
+    overflow: 'hidden',
     backgroundColor: '#ffffff',
-    ...Platform.select({
-      android: {
-        paddingHorizontal: 0,
-      },
-      ios: {
-        paddingHorizontal: 8,
-      },
-    }),
   },
   picker: {
-    height: Platform.OS === 'ios' ? 50 : 55,
+    height: Platform.OS === 'ios' ? 130 : 50,
     width: '100%',
     backgroundColor: '#ffffff',
     color: '#333333',
-    ...Platform.select({
-      android: {
-        marginLeft: 8,
-        marginRight: -8,
-      },
-      ios: {
-        marginLeft: 0,
-      },
-    }),
+  },
+  fieldSpacing: {
+    marginBottom: 16,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
     borderColor: '#e0e0e0',
     borderWidth: 1,
     borderRadius: 10,
@@ -866,32 +791,27 @@ const styles = StyleSheet.create({
     fontSize: 15,
     paddingVertical: 0,
   },
-  errorInput: {
-    borderColor: '#ff0000',
-  },
   errorBorder: {
     borderColor: '#ff0000',
-  },
-  errorText: {
-    color: '#ff0000',
-    fontSize: 12,
-    marginTop: 4,
-    marginBottom: 10,
-    marginLeft: 5,
+    borderWidth: 1.5,
   },
   button: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#4158D0',
-    padding: 15,
+    padding: 16,
     borderRadius: 10,
-    marginTop: 20,
+    marginTop: 24,
+    marginBottom: 10,
     elevation: 2,
     shadowColor: '#4158D0',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,
+  },
+  buttonDisabled: {
+    opacity: 0.7,
   },
   buttonIcon: {
     marginRight: 8,
@@ -904,8 +824,8 @@ const styles = StyleSheet.create({
   loginLink: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 25,
-    marginBottom: 10,
+    marginTop: 20,
+    marginBottom: 20,
   },
   loginText: {
     color: '#666',

@@ -1,11 +1,11 @@
+import { useAlert } from '@/context/AlertContext';
 import { useAuth } from '@/context/AuthContext';
 import { useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Alert,
   Animated,
   Dimensions,
   StyleSheet,
@@ -23,17 +23,15 @@ const ForgotPassword = () => {
   const [phone, setPhone] = useState('');
   const [loading, setLoading] = useState(false);
   const [otpSent, setOtpSent] = useState(false);
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState('');
   const [resendTimer, setResendTimer] = useState(30);
   const [canResend, setCanResend] = useState(false);
   
-  // Animation values
   const fadeAnim = useState(new Animated.Value(0))[0];
   const slideAnim = useState(new Animated.Value(50))[0];
-  const inputRefs = useRef([]);
+  const { showAlert } = useAlert();
 
   useEffect(() => {
-    // Start animations when component mounts
     Animated.parallel([
       Animated.timing(fadeAnim, {
         toValue: 1,
@@ -49,7 +47,6 @@ const ForgotPassword = () => {
   }, []);
 
   useEffect(() => {
-    // Timer for resend OTP
     let interval;
     if (otpSent && resendTimer > 0) {
       interval = setInterval(() => {
@@ -62,12 +59,10 @@ const ForgotPassword = () => {
     return () => clearInterval(interval);
   }, [resendTimer, otpSent]);
 
-  // Function to clean phone number
   const cleanPhoneNumber = (phone) => {
     return phone.replace(/\D/g, '').slice(0, 10);
   };
 
-  // Function to get full phone number with country code
   const getFullPhoneNumber = () => {
     const cleaned = cleanPhoneNumber(phone);
     if (cleaned.length === 10) {
@@ -80,7 +75,7 @@ const ForgotPassword = () => {
     const cleanedPhone = cleanPhoneNumber(phone);
     
     if (!cleanedPhone || cleanedPhone.length !== 10) {
-      Alert.alert('Error', 'Please enter a valid 10-digit phone number');
+      showAlert('Error', 'Please enter a valid 10-digit phone number');
       return;
     }
 
@@ -88,90 +83,115 @@ const ForgotPassword = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       setLoading(true);
 
-      // Simulate OTP sending (replace with actual OTP service)
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      setOtpSent(true);
-      setResendTimer(30);
-      setCanResend(false);
-      Alert.alert('OTP Sent', `OTP has been sent to +91 ${cleanedPhone}`);
+      const fullPhoneNumber = getFullPhoneNumber();
+      const result = await signIn(fullPhoneNumber, null, true);
+
+      if (result?.otpSent) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        setOtpSent(true);
+        setResendTimer(30);
+        setCanResend(false);
+        showAlert('OTP Sent', `OTP has been sent to ${fullPhoneNumber}`);
+      } else if (result?.error) {
+        throw new Error(result.error);
+      }
       
     } catch (error) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       console.error('Error sending OTP:', error);
-      Alert.alert('Error', 'Failed to send OTP. Please try again.');
+      
+      // Extract error message
+      const errorMessage = error.message || '';
+      const errorString = error.toString();
+      
+      // Check for "Signups not allowed for otp" error
+      if (errorMessage.includes('Signups not allowed for otp') || 
+          errorString.includes('Signups not allowed for otp') ||
+          errorMessage.toLowerCase().includes('signup not allowed') || 
+          errorMessage.toLowerCase().includes('not registered') ||
+          errorMessage.toLowerCase().includes('user not found')) {
+        
+        // Show custom alert for signup required
+        showAlert(
+          'Account Not Found',
+          'This phone number is not registered. Please sign up first.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate to SignIn screen after user clicks OK
+                navigation.navigate('SignUp');
+              }
+            }
+          ]
+        );
+      } else {
+        // Show generic error for other cases
+        showAlert('Error', errorMessage || 'Failed to send OTP. Please try again.');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const handleOtpChange = (value, index) => {
-    if (value.length > 1) return; 
-    
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-    
-    // Auto-focus next input
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
+  const verifyOTP = async () => {
+    if (otp.length !== 6) {
+      showAlert('Error', 'Please enter a 6-digit OTP');
+      return;
     }
-    
-    // Auto-verify when all digits are entered
-    if (newOtp.every(digit => digit !== '') && newOtp.join('').length === 6) {
-      verifyOTP(newOtp.join(''));
-    }
-  };
 
-  const handleKeyPress = (e, index) => {
-    // Handle backspace
-    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
-    }
-  };
-
-  const verifyOTP = async (otpCode) => {
     setLoading(true);
     try {
-      // For demo purposes, accept any 6-digit code starting with 1-9
-      // In a real app, you would verify the OTP with your backend
-      if (otpCode.length === 6 && /^[1-9]\d{5}$/.test(otpCode)) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
-        // Simulate OTP verification
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        // Get full phone number with country code
-        const fullPhoneNumber = getFullPhoneNumber();
-        if (!fullPhoneNumber) {
-          throw new Error('Invalid phone number');
-        }
+      const fullPhoneNumber = getFullPhoneNumber();
+      if (!fullPhoneNumber) {
+        throw new Error('Invalid phone number');
+      }
 
-        // Here you would typically sign in the user after OTP verification
-        // For demo, we'll navigate to appropriate screen based on user role
-        Alert.alert('Success', 'OTP verified successfully!', [
-          {
-            text: 'Continue',
-            onPress: () => {
-              // Navigate to appropriate screen based on your app flow
-              navigation.navigate('Student'); // or AdminDashboard, GuardScanner, etc.
-            }
-          }
-        ]);
-        
-      } else {
-        throw new Error('Invalid OTP');
+      const userData = await signIn(fullPhoneNumber, otp, true);
+
+      if (userData) {
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        // Handle successful verification
+        showAlert('Success', 'Update your password by going to Settings and clicking on ‘Forgot Password’');
+        // You might want to navigate to login or home screen here
+        // navigation.navigate('Login');
       }
       
     } catch (error) {
       console.error('OTP verification error:', error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-      Alert.alert('Error', 'Invalid OTP. Please try again.');
       
-      // Clear OTP inputs
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
+      const errorMessage = error.message || '';
+      const errorString = error.toString();
+      
+      // Check for "Signups not allowed for otp" error
+      if (errorMessage.includes('Signups not allowed for otp') || 
+          errorString.includes('Signups not allowed for otp') ||
+          errorMessage.toLowerCase().includes('signup not allowed') || 
+          errorMessage.toLowerCase().includes('not registered') ||
+          errorMessage.toLowerCase().includes('user not found')) {
+        
+        // Show custom alert for signup required
+        showAlert(
+          'Account Not Found',
+          'This phone number is not registered. Please sign up first.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                // Navigate to SignIn screen after user clicks OK
+                navigation.navigate('SignIn');
+                // Reset the OTP state
+                setOtpSent(false);
+                setOtp('');
+              }
+            }
+          ]
+        );
+      } else {
+        showAlert('Error', errorMessage || 'Invalid OTP. Please try again.');
+        setOtp('');
+      }
     } finally {
       setLoading(false);
     }
@@ -181,115 +201,38 @@ const ForgotPassword = () => {
     if (!canResend) return;
     
     try {
+      setOtp('');
       await handleSendOTP();
     } catch (error) {
       console.error('Error resending OTP:', error);
-      Alert.alert('Error', 'Failed to resend OTP. Please try again.');
+      
+      const errorMessage = error.message || '';
+      const errorString = error.toString();
+      
+      if (errorMessage.includes('Signups not allowed for otp') || 
+          errorString.includes('Signups not allowed for otp') ||
+          errorMessage.toLowerCase().includes('signup not allowed') || 
+          errorMessage.toLowerCase().includes('not registered') ||
+          errorMessage.toLowerCase().includes('user not found')) {
+        
+        showAlert(
+          'Account Not Found',
+          'This phone number is not registered. Please sign up first.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                navigation.navigate('SignUp');
+                setOtpSent(false);
+              }
+            }
+          ]
+        );
+      } else {
+        showAlert('Error', 'Failed to resend OTP. Please try again.');
+      }
     }
   };
-
-  const renderPhoneInput = () => (
-    <View style={styles.formContainer}>
-      <Text style={styles.title}>Enter Your Phone</Text>
-      <Text style={styles.subtitle}>We'll send you a 6-digit OTP to verify</Text>
-      
-      <View style={styles.inputContainer}>
-        <View style={styles.phoneInputContainer}>
-          <View style={styles.countryCode}>
-            <Text style={styles.countryCodeText}>+91</Text>
-          </View>
-          <TextInput
-            placeholder="10-digit phone number"
-            value={phone}
-            onChangeText={setPhone}
-            keyboardType="phone-pad"
-            autoCapitalize="none"
-            style={styles.phoneInput}
-            placeholderTextColor="#999"
-            maxLength={10}
-          />
-        </View>
-      </View>
-
-      <TouchableOpacity
-        style={[styles.button, loading && styles.buttonDisabled]}
-        onPress={handleSendOTP}
-        disabled={loading}
-        activeOpacity={0.8}
-      >
-        {loading ? (
-          <ActivityIndicator color="#fff" size="small" />
-        ) : (
-          <Text style={styles.buttonText}>Send OTP</Text>
-        )}
-      </TouchableOpacity>
-
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => navigation.goBack()}
-      >
-        <Text style={styles.backButtonText}>Back to Sign In</Text>
-      </TouchableOpacity>
-    </View>
-  );
-
-  const renderOtpInput = () => (
-    <View style={styles.formContainer}>
-      <Text style={styles.title}>Enter OTP</Text>
-      <Text style={styles.subtitle}>
-        We've sent a 6-digit code to{'\n'}
-        <Text style={styles.phoneText}>+91 {phone}</Text>
-      </Text>
-
-      <View style={styles.otpContainer}>
-        {otp.map((digit, index) => (
-          <View key={index} style={styles.otpInputWrapper}>
-            <TextInput
-              ref={ref => inputRefs.current[index] = ref}
-              style={[
-                styles.otpInput,
-                digit ? styles.otpInputFilled : null,
-              ]}
-              value={digit}
-              onChangeText={(value) => handleOtpChange(value, index)}
-              onKeyPress={(e) => handleKeyPress(e, index)}
-              keyboardType="numeric"
-              maxLength={1}
-              selectTextOnFocus
-              autoFocus={index === 0}
-              editable={!loading}
-            />
-            {digit && <View style={styles.dotIndicator} />}
-          </View>
-        ))}
-      </View>
-
-      <View style={styles.resendContainer}>
-        <Text style={styles.resendText}>
-          Didn't receive the code?{' '}
-        </Text>
-        <TouchableOpacity
-          onPress={handleResendOTP}
-          disabled={!canResend}
-          style={styles.resendButton}
-        >
-          <Text style={[
-            styles.resendButtonText,
-            canResend ? styles.resendButtonActive : styles.resendButtonInactive
-          ]}>
-            {canResend ? 'Resend OTP' : `Resend in ${resendTimer}s`}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
-      <TouchableOpacity 
-        style={styles.backButton}
-        onPress={() => setOtpSent(false)}
-      >
-        <Text style={styles.backButtonText}>Change Phone Number</Text>
-      </TouchableOpacity>
-    </View>
-  );
 
   return (
     <View style={{flex: 1}}>
@@ -315,7 +258,116 @@ const ForgotPassword = () => {
           }
         ]}
       >
-        {!otpSent ? renderPhoneInput() : renderOtpInput()}
+        <View style={styles.formContainer}>
+          {!otpSent ? (
+            <>
+              <Text style={styles.title}>Forgot Password</Text>
+              <Text style={styles.subtitle}>Enter your registered phone number to receive OTP</Text>
+              
+              <View style={styles.inputContainer}>
+                <View style={styles.phoneInputContainer}>
+                  <View style={styles.countryCode}>
+                    <Text style={styles.countryCodeText}>+91</Text>
+                  </View>
+                  <TextInput
+                    placeholder="10-digit phone number"
+                    value={phone}
+                    onChangeText={setPhone}
+                    keyboardType="phone-pad"
+                    autoCapitalize="none"
+                    style={styles.phoneInput}
+                    placeholderTextColor="#999"
+                    maxLength={10}
+                    editable={!loading}
+                  />
+                </View>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, loading && styles.buttonDisabled]}
+                onPress={handleSendOTP}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Send OTP</Text>
+                )}
+              </TouchableOpacity>
+
+              <TouchableOpacity 
+                style={styles.backButton}
+                onPress={() => navigation.goBack()}
+              >
+                <Text style={styles.backButtonText}>Back to Sign In</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.title}>Verify OTP</Text>
+              <Text style={styles.subtitle}>
+                We've sent a 6-digit code to{'\n'}
+                <Text style={styles.phoneText}>+91 {phone}</Text>
+              </Text>
+
+              <View style={styles.inputContainer}>
+                <TextInput
+                  placeholder="Enter 6-digit OTP"
+                  value={otp}
+                  onChangeText={setOtp}
+                  keyboardType="numeric"
+                  autoCapitalize="none"
+                  style={styles.otpInput}
+                  placeholderTextColor="#999"
+                  maxLength={6}
+                  editable={!loading}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, (loading || otp.length !== 6) && styles.buttonDisabled]}
+                onPress={verifyOTP}
+                disabled={loading || otp.length !== 6}
+                activeOpacity={0.8}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Verify OTP</Text>
+                )}
+              </TouchableOpacity>
+
+              <View style={styles.resendContainer}>
+                <Text style={styles.resendText}>
+                  Didn't receive the code?{' '}
+                </Text>
+                <TouchableOpacity
+                  onPress={handleResendOTP}
+                  disabled={!canResend}
+                  style={styles.resendButton}
+                >
+                  <Text style={[
+                    styles.resendButtonText,
+                    canResend ? styles.resendButtonActive : styles.resendButtonInactive
+                  ]}>
+                    {canResend ? 'Resend OTP' : `Resend in ${resendTimer}s`}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity 
+                style={styles.backButton}
+                onPress={() => {
+                  setOtpSent(false);
+                  setOtp('');
+                }}
+              >
+                <Text style={styles.backButtonText}>Change Phone Number</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
       </Animated.View>
     </View>
   );
@@ -420,6 +472,15 @@ const styles = StyleSheet.create({
     fontSize: 16,
     paddingVertical: 0,
   },
+  otpInput: {
+    flex: 1,
+    height: 50,
+    color: '#333',
+    fontSize: 18,
+    paddingVertical: 0,
+    textAlign: 'center',
+    letterSpacing: 4,
+  },
   button: {
     backgroundColor: '#4158D0',
     paddingVertical: 16,
@@ -450,43 +511,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#4158D0',
     fontWeight: '500',
-  },
-  otpContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 30,
-    paddingHorizontal: 10,
-    width: '100%',
-  },
-  otpInputWrapper: {
-    position: 'relative',
-    marginHorizontal: 4,
-  },
-  otpInput: {
-    width: 44,
-    height: 54,
-    borderWidth: 2,
-    borderColor: '#e2e8f0',
-    borderRadius: 12,
-    textAlign: 'center',
-    fontSize: 20,
-    fontWeight: '600',
-    color: '#1e293b',
-    backgroundColor: '#ffffff',
-  },
-  otpInputFilled: {
-    borderColor: '#2563eb',
-    backgroundColor: '#eff6ff',
-  },
-  dotIndicator: {
-    position: 'absolute',
-    bottom: 8,
-    left: '50%',
-    marginLeft: -3,
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: '#2563eb',
   },
   resendContainer: {
     flexDirection: 'row',
