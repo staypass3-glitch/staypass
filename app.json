@@ -33,7 +33,7 @@
       },
       "forcedDarkAllowed": false,
       "edgeToEdgeEnabled": true,
-      "package": "com.guru333.StayPass",
+      "package": "com.guru333.StayPass.entryexit",
       "googleServicesFile": "./google-services.json",
       "permissions": [
         "android.permission.CAMERA",
@@ -43,7 +43,7 @@
         "android.permission.ACCESS_COARSE_LOCATION"
       ],
       "notification": {
-        "icon": "./assets/images/logo.png",
+        "icon": "./assets/images/notification_icon.png",
         "defaultSound": true,
         "sound": "./assets/sounds/custom_noti.mp3"
       }

@@ -1,4 +1,5 @@
 import { ImagePickerAlert } from '@/components/ImagePickerAlert';
+import { supabaseAnonKey, supabaseUrl } from '@/constants';
 import { useAuth } from '@/context/AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
@@ -29,6 +30,8 @@ const SignUpScreen = () => {
   const scrollViewRef = useRef(null);
   const [role, setRole] = useState('student');
   const [secureTextEntry, setSecureTextEntry] = useState(true);
+  const { signUp, signIn } = useAuth();
+
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -50,7 +53,6 @@ const SignUpScreen = () => {
     message: '', 
     buttons: [] 
   });
-  const { signUp, signIn } = useAuth();
 
   const showAlert = useCallback((title, message, buttons = []) => {
     setCustomAlert({ visible: true, title, message, buttons });
@@ -233,27 +235,55 @@ const SignUpScreen = () => {
       if (role === 'student') allFields.push('roomNumber', 'parentPhone', 'department');
       if (role === 'admin') allFields.push('department');
       if (role === 'guard') allFields.push('shift');
-
+  
       const newTouched = {};
       allFields.forEach(field => {
         newTouched[field] = true;
       });
       setTouched(newTouched);
-
+  
       // Validate all fields - this will set errors and trigger red borders
       if (!validateAllFields()) {
         showAlert('Validation Error', 'Please fill all required fields correctly.');
         return;
       }
-
+  
       setLoading(true);
-
+  
       // Prepare phone numbers with country code
       const fullPhoneNumber = getFullPhoneNumber(formData.phone);
       if (!fullPhoneNumber) {
         throw new Error('Invalid phone number format');
       }
+  
+      const phoneCheckResponse = await fetch(
+        `${supabaseUrl}/functions/v1/check-phone`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${supabaseAnonKey}`
+          },
+          body: JSON.stringify({
+            phone: fullPhoneNumber
+          })
+        }
+      );
+  
+      if (!phoneCheckResponse.ok) {
+        const errorData = await phoneCheckResponse.json();
+        console.error('Phone check failed:', errorData);
 
+      } else {
+        const phoneCheckResult = await phoneCheckResponse.json();
+        
+        if (phoneCheckResult.exists) {
+          showAlert('Account Exists', 'This phone number is already registered. Please use a different phone number or sign in.');
+          setLoading(false);
+          return; 
+        }
+      }
+  
       let fullParentPhoneNumber = null;
       if (role === 'student') {
         fullParentPhoneNumber = getFullPhoneNumber(formData.parentPhone);
@@ -261,19 +291,16 @@ const SignUpScreen = () => {
           throw new Error('Invalid parent phone number format');
         }
       }
-
+  
       const completeFormData = { 
         ...formData, 
         role,
         phone: fullPhoneNumber,
         ...(role === 'student' && { parentPhone: fullParentPhoneNumber })
       };
-
-      const { data, error } = await signUp(completeFormData);
-      if (error) throw error;
-      
-      const { data: signUpData, error: signUpError } = await signIn(completeFormData.phone, completeFormData.password);
-      if (signUpError) throw signUpError;
+  
+      navigation.navigate('EnterOtp', { completeFormData: completeFormData });
+  
     } catch (error) {
       showAlert('Registration Failed', error.message);
     } finally {
@@ -487,7 +514,7 @@ const SignUpScreen = () => {
                         shouldShowError('phone') && styles.errorBorder
                       ]}>
                         <MaterialIcons name="phone" size={20} color="#666" style={styles.icon} />
-                        {renderPhoneInput('phone', 'Student Phone', formData.phone)}
+                        {renderPhoneInput('phone', 'Phone', formData.phone)}
                       </View>
                     </View>
 

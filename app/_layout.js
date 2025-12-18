@@ -9,10 +9,10 @@ import { AuthProvider } from '../context/AuthContext.js';
 import { UserProvider } from '../context/UserContext.js';
 import '../firebase.js';
 
-// ✅ Notification Handler (REQUIRED)
+
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,  // this only tells system how to handle background
+    shouldShowAlert: true,  
     shouldPlaySound: false,
     shouldSetBadge: false,
   }),

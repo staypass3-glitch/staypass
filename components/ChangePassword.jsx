@@ -35,14 +35,14 @@ const ChangePassword = () => {
   });
   const {user} = useUser();
   const Navigation = useNavigation();
-
+  const phone = parseInt(user?.phone ? user.phone.replace('/\D/g','') : null);
   // Add BackHandler effect
   useEffect(() => {
     const backHandler = BackHandler.addEventListener(
       'hardwareBackPress',
       () => {
         Navigation.goBack();
-        return true; // Prevent default behavior
+        return true; 
       }
     );
 
@@ -92,7 +92,7 @@ const ChangePassword = () => {
     try {
       // First, verify the current password by signing in
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: user.email, // You might need to get the current user's email differently
+        phone:phone,// You might need to get the current user's phone differently
         password: currentPassword,
       });
 
@@ -136,7 +136,7 @@ const ChangePassword = () => {
       setIsLoading(false);
       
     }
-  }, [confirmPass, validatePassword, showAlert, user.email, Navigation]);
+  }, [confirmPass, validatePassword, showAlert, phone, Navigation]);
 
   const styles = useMemo(() => StyleSheet.create({
     scrollContainer: {

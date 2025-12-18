@@ -419,7 +419,7 @@ const StudentDashboard = () => {
       }
     });
   
-    // Cleanup listener on unmount
+
     return () => unsubscribe();
   }, []);
 

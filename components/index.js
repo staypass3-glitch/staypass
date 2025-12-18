@@ -9,8 +9,8 @@ export { default as ResponsiveText } from './ResponsiveText';
 export { default as CustomLoadingScreen } from './CustomLoadingScreen';
 
 // Admin Components
+export { default as AdminDashboard } from './admin/AdminDashboard';
 export { default as PendingApproval } from './admin/PendingApproval';
-export { default as AdminDashboard } from './AdminDashboard';
 
 // Core Components
 export { default as CustomAlert } from './CustomAlert';

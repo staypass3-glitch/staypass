@@ -11,7 +11,7 @@ import * as Notifications from 'expo-notifications';
 import { useFocusEffect, useNavigation } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert,
+  ActivityIndicator,
   BackHandler,
   Dimensions,
   Modal,
@@ -78,7 +78,7 @@ const AdminDashboard = () => {
       setSessions(data || []);
     } catch (error) {
       console.error("Error fetching sessions:", error);
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } finally {
       setCustomIndicator(false);
     }
@@ -122,7 +122,7 @@ const AdminDashboard = () => {
 
       await supabase
         .from('user_push_tokens')
-        .upsert({
+        .insert({
           user_id: user.id,
           expo_push_token: token,
           last_used_at: new Date().toISOString(),
@@ -166,7 +166,7 @@ const AdminDashboard = () => {
       return session;
     } catch (error) {
       console.error("Error creating session:", error);
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
       return null;
     } finally {
       setLoading(false);
@@ -217,7 +217,7 @@ const AdminDashboard = () => {
       }, 100);
     } catch (error) {
       console.error("Error showing session QR:", error);
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } finally {
       setCustomIndicator(false);
     }
@@ -242,7 +242,7 @@ const AdminDashboard = () => {
       showAlert('Success', 'Session deactivated successfully',[{text:'Ok'}]);
     } catch (error) {
       console.error("Error deactivating session:", error);
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -267,7 +267,7 @@ const AdminDashboard = () => {
       showAlert('Success', 'Session reactivated successfully',[{text:'Ok'}]);
     } catch (error) {
       console.error("Error reactivating session:", error);
-      Alert.alert('Error', error.message);
+      showAlert('Error', error.message);
     } finally {
       setLoading(false);
     }
@@ -280,7 +280,7 @@ const AdminDashboard = () => {
     try {
       const uuid = Crypto.randomUUID();
       if (!uuid) {
-        Alert.alert('Error', 'Failed to generate UUID');
+        showAlert('Error', 'Failed to generate UUID');
         return;
       }
     
@@ -292,12 +292,12 @@ const AdminDashboard = () => {
     
       if (error) {
         console.error('Error updating:', error);
-        Alert.alert('Update Error', error.message);
+        showAlert('Update Error', error.message);
         return;
       }
     
       if (!data || data.length === 0) {
-        Alert.alert('Data Error', 'No matching record found');
+        showAlert('Data Error', 'No matching record found');
         return;
       }
       
@@ -315,7 +315,7 @@ const AdminDashboard = () => {
 
       if (qrUpdateError) {
         console.error('Error updating QR code:', qrUpdateError);
-        Alert.alert('Error', 'Failed to update QR code in database');
+        showAlert('Error', 'Failed to update QR code in database');
         return;
       }
 
@@ -328,7 +328,7 @@ const AdminDashboard = () => {
       showAlert('Success', 'QR code updated successfully!',[{text:'Ok'}]);
     } catch (err) {
       console.error('Unexpected error:', err);
-      Alert.alert('Error', 'Failed to generate UUID');
+      showAlert('Error', 'Failed to generate UUID');
     } finally {
       setNewQr(false);
     }
@@ -336,7 +336,7 @@ const AdminDashboard = () => {
 
   const handleCollegeSubmit = useCallback(async () => {
     if (!collegeName.trim()) {
-      Alert.alert('Error', 'Please enter a college name');
+      showAlert('Error', 'Please enter a college name');
       return;
     }
 
@@ -352,7 +352,7 @@ const AdminDashboard = () => {
       setCollegeId(college.id);
       const newSession = await createNewSession(college.id);
 
-      Alert.alert('Success', 'College details saved successfully');
+      showAlert('Success', 'College details saved successfully');
       await fetchSessions();
       setShowCollegeForm(false);
       setCollegeName('');
@@ -364,7 +364,7 @@ const AdminDashboard = () => {
         });
       }
     } catch (error) {
-      Alert.alert('College Details', 'College Already Exists');
+      showAlert('College Details', 'College Already Exists');
     } finally {
       setLoading(false);
     }
@@ -372,7 +372,7 @@ const AdminDashboard = () => {
 
   const sessionIdSubmitted = useCallback(async () => {
     if (!sessionId.trim()) {
-      Alert.alert('Session Id', 'Please enter the session id');
+      showAlert('Session Id', 'Please enter the session id');
       return;
     }
   
@@ -383,7 +383,7 @@ const AdminDashboard = () => {
       const { data: sessionData, error: sessionError } = await adminService.findSessionById(refinedSessionId);
       if (sessionError) throw sessionError;
       if (!sessionData || sessionData.length === 0) {
-        Alert.alert('Error', 'Session not found');
+        showAlert('Error', 'Session not found');
         return;
       }
 
@@ -392,7 +392,7 @@ const AdminDashboard = () => {
 
       const { data } = await adminService.checkExistingSession(user.id, sessionData[0]?.college_id);
       if (data) {
-        Alert.alert('Request', 'Already connected to the session');
+        showAlert('Request', 'Already connected to the session');
         setConnectExistingSession(false);
         return;
       }
@@ -402,10 +402,10 @@ const AdminDashboard = () => {
 
       fetchSessions();
       setConnectExistingSession(false);
-      Alert.alert('Success', 'Connected to existing session successfully');
+      showAlert('Success', 'Connected to existing session successfully');
     } catch (error) {
       console.error("Error connecting to session:", error);
-      Alert.alert('Error', error?.message || 'Failed to connect to session');
+      showAlert('Error', error?.message || 'Failed to connect to session');
     } finally {
       setLoading(false);
     }
@@ -413,7 +413,7 @@ const AdminDashboard = () => {
 
   const handleSessionDetails = useCallback(() => {
     if (!selectedSession) {
-      Alert.alert('Error', 'No session selected');
+      showAlert('Error', 'No session selected');
       return;
     }
     navigation.navigate('SessionDetails', { session: selectedSession });
@@ -421,7 +421,7 @@ const AdminDashboard = () => {
 
   const handlePendingRequests = useCallback(() => {
     if (!selectedSession) {
-      Alert.alert('Error', 'No session selected');
+      showAlert('Error', 'No session selected');
       return;
     }
     navigation.navigate('PendingApproval', { collegeId: selectedSession.college_id });
@@ -462,7 +462,7 @@ const AdminDashboard = () => {
         setCollegeId(data.college_id);
       } catch (error) {
         console.error("Error fetching college ID:", error);
-        Alert.alert('Error', error.message);
+        showAlert('Error', error.message);
       }
     };
 
@@ -532,7 +532,7 @@ const AdminDashboard = () => {
           }
         } catch (error) {
           if (isActive) {
-            Alert.alert('Error', `Error occurred while fetching the last request ${error}`);
+            showAlert('Error', `Error occurred while fetching the last request ${error}`);
             setIsRequestPresent(false);
           }
         }

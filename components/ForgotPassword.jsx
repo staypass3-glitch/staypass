@@ -151,10 +151,9 @@ const ForgotPassword = () => {
 
       if (userData) {
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        // Handle successful verification
+
         showAlert('Success', 'Update your password by going to Settings and clicking on ‘Forgot Password’');
-        // You might want to navigate to login or home screen here
-        // navigation.navigate('Login');
+
       }
       
     } catch (error) {

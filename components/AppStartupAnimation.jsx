@@ -5,7 +5,7 @@ import { Animated, Dimensions, StyleSheet, View } from 'react-native';
 
 const { width, height } = Dimensions.get('window');
 
-const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = false }) => {
+const AppStartupAnimation = ({ onAnimationComplete }) => {
   const logoScale = useRef(new Animated.Value(0)).current;
   const logoOpacity = useRef(new Animated.Value(0)).current;
   const textOpacity = useRef(new Animated.Value(0)).current;
@@ -14,17 +14,13 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
   const [currentStep, setCurrentStep] = useState(0);
 
   const loadingSteps = [
-    'Initializing app...',
-    'Checking cached data...',
-    'Loading user preferences...',
-    'Preparing your experience...',
-    'Almost ready...'
+    'Starting up...',
+    'Getting things ready...',
+    'Almost there...',
   ];
 
   useEffect(() => {
-    // Start the animation sequence
     const startAnimation = async () => {
-      // Logo entrance animation
       Animated.parallel([
         Animated.timing(logoScale, {
           toValue: 1,
@@ -38,7 +34,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
         }),
       ]).start();
 
-      // Text fade in after logo
       setTimeout(() => {
         Animated.timing(textOpacity, {
           toValue: 1,
@@ -47,7 +42,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
         }).start();
       }, 400);
 
-      // Progress bar animation
       setTimeout(() => {
         Animated.timing(progressWidth, {
           toValue: width * 0.8,
@@ -56,7 +50,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
         }).start();
       }, 800);
 
-      // Pulse animation for the icon
       const pulseAnimation = Animated.loop(
         Animated.sequence([
           Animated.timing(pulseAnim, {
@@ -73,7 +66,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
       );
       pulseAnimation.start();
 
-      // Step through loading messages
       const stepInterval = setInterval(() => {
         setCurrentStep(prev => {
           if (prev < loadingSteps.length - 1) {
@@ -83,19 +75,17 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
             return prev;
           }
         });
-      }, 600);
+      }, 800);
 
-      // Complete animation after appropriate time
-      const animationDuration = isRetrievingFromStorage ? 2500 : 3000;
       setTimeout(() => {
         onAnimationComplete?.();
-      }, animationDuration);
+      }, 3000);
 
       return () => clearInterval(stepInterval);
     };
 
     startAnimation();
-  }, [isRetrievingFromStorage]);
+  }, []);
 
   return (
     <View style={styles.container}>
@@ -105,7 +95,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
       >
-        {/* Logo/Icon */}
         <Animated.View
           style={[
             styles.logoContainer,
@@ -119,13 +108,12 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
           ]}
         >
           <MaterialIcons 
-            name={isRetrievingFromStorage ? "storage" : "school"} 
+            name="security" 
             size={80} 
             color="white" 
           />
         </Animated.View>
 
-        {/* App Name */}
         <Animated.Text
           style={[
             styles.appName,
@@ -137,19 +125,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
           StayPass
         </Animated.Text>
 
-        {/* Subtitle */}
-        <Animated.Text
-          style={[
-            styles.subtitle,
-            {
-              opacity: textOpacity,
-            },
-          ]}
-        >
-          Smart Campus Management
-        </Animated.Text>
-
-        {/* Dynamic Loading Text */}
         <Animated.Text
           style={[
             styles.loadingText,
@@ -161,7 +136,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
           {loadingSteps[currentStep]}
         </Animated.Text>
 
-        {/* Progress Bar */}
         <View style={styles.progressContainer}>
           <Animated.View
             style={[
@@ -173,7 +147,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
           />
         </View>
 
-        {/* Loading Dots */}
         <View style={styles.dotsContainer}>
           <Animated.View
             style={[
@@ -200,18 +173,6 @@ const AppStartupAnimation = ({ onAnimationComplete, isRetrievingFromStorage = fa
             ]}
           />
         </View>
-
-        {/* Status Indicator */}
-        <Animated.Text
-          style={[
-            styles.statusText,
-            {
-              opacity: textOpacity,
-            },
-          ]}
-        >
-          {isRetrievingFromStorage ? 'Retrieving cached data...' : 'Loading fresh data...'}
-        </Animated.Text>
       </LinearGradient>
     </View>
   );
@@ -233,24 +194,18 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   appName: {
-    fontSize: 36,
+    fontSize: 42,
     fontWeight: 'bold',
     color: 'white',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  subtitle: {
-    fontSize: 16,
-    color: 'rgba(255, 255, 255, 0.8)',
     marginBottom: 40,
     textAlign: 'center',
   },
   loadingText: {
-    fontSize: 14,
-    color: 'rgba(255, 255, 255, 0.7)',
+    fontSize: 16,
+    color: 'rgba(255, 255, 255, 0.9)',
     marginBottom: 30,
     textAlign: 'center',
-    minHeight: 20,
+    minHeight: 24,
   },
   progressContainer: {
     width: width * 0.8,
@@ -269,7 +224,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 20,
   },
   dot: {
     width: 8,
@@ -278,11 +232,6 @@ const styles = StyleSheet.create({
     backgroundColor: 'white',
     marginHorizontal: 4,
   },
-  statusText: {
-    fontSize: 12,
-    color: 'rgba(255, 255, 255, 0.6)',
-    textAlign: 'center',
-  },
 });
 
-export default AppStartupAnimation; 
+export default AppStartupAnimation;

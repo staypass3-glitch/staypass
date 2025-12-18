@@ -25,7 +25,7 @@ import ScreenWrapper from './ScreenWrapper';
 // Constants
 const LOGOUT_DELAY = 2000;
 const CAMERA_HEIGHT = 400;
-const MemoizedMaterialIcons  = React.memo(MaterialIcons);
+const MemoizedMaterialIcons = React.memo(MaterialIcons);
 
 // Translations
 const translations = {
@@ -41,7 +41,6 @@ const translations = {
     name: 'Name',
     room: 'Room',
     department: 'Department',
-    destination: 'Destination',
     action: 'Action',
     goingHome: 'Going Home',
     returning: 'Returning',
@@ -57,10 +56,6 @@ const translations = {
     howToUse: 'How to Use',
     noImage: 'No Image',
     closeSettings: 'Close Settings',
-    parentNotified: 'Parent Notified via SMS',
-    parentNotificationFailed: 'Failed to notify parent',
-    smsNotificationSent: 'SMS sent to parent successfully',
-    smsNotificationFailed: 'Failed to send SMS to parent',
     instructions: [
       '1. Enter the Session ID provided by your admin',
       '2. Click "Join Session" to start your duty',
@@ -81,7 +76,6 @@ const translations = {
     name: 'नाव',
     room: 'खोली',
     department: 'विभाग',
-    destination: 'गंतव्य स्थान',
     action: 'कृती',
     goingHome: 'घरी जात आहे',
     returning: 'परत येत आहे',
@@ -97,10 +91,6 @@ const translations = {
     howToUse: 'कसे वापरावे',
     noImage: 'चित्र नाही',
     closeSettings: 'सेटिंग्ज बंद करा',
-    parentNotified: 'पालकांना एसएमएस द्वारे सूचित केले',
-    parentNotificationFailed: 'पालकांना सूचित करण्यात अयशस्वी',
-    smsNotificationSent: 'पालकांना एसएमएस पाठवला',
-    smsNotificationFailed: 'पालकांना एसएमएस पाठविण्यात अयशस्वी',
     instructions: [
       '१. तुमच्या प्रशासकाने दिलेला सत्र आयडी प्रविष्ट करा',
       '२. तुमची ड्युटी सुरू करण्यासाठी "सत्रात सामील व्हा" वर क्लिक करा',
@@ -123,23 +113,25 @@ const GuardScanner = () => {
   const [studentImage, setStudentImage] = useState(null);
   const [language, setLanguage] = useState('en');
   const [settingsVisible, setSettingsVisible] = useState(false);
-  const [customAlert,setCustomAlert] = useState({visible:false,title:'',message:'',buttons:[]});
+  const [customAlert, setCustomAlert] = useState({ visible: false, title: '', message: '', buttons: [] });
   const [smsNotificationStatus, setSmsNotificationStatus] = useState(null);
+
   // Individual loading states
   const [joinLoading, setJoinLoading] = useState(false);
   const [scanLoading, setScanLoading] = useState(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [logoutLoading, setLogoutLoading] = useState(false);
   const [customIndicator, setCustomIndicator] = useState(false);
-  const [loggingOut,setLoggingOut] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
+
   // Refs to prevent multiple simultaneous scans
   const scanningRef = useRef(false);
   const logoutTimerRef = useRef(null);
   const t = translations[language];
 
-  const showAlert = useCallback((title,message,buttons=[])=>{
-    setCustomAlert({visible:true,title:title,message:message,buttons:buttons});
-  });
+  const showAlert = useCallback((title, message, buttons = []) => {
+    setCustomAlert({ visible: true, title: title, message: message, buttons: buttons });
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -160,7 +152,7 @@ const GuardScanner = () => {
           .select('language_preference')
           .eq('id', user.id)
           .single();
-        
+
         if (data?.language_preference) {
           setLanguage(data.language_preference);
         }
@@ -172,56 +164,55 @@ const GuardScanner = () => {
   }, [user?.id]);
 
   async function notifyStudentOfScan(studentId) {
+    const { data, error } = await supabase
+      .from("user_push_tokens")
+      .select("expo_push_token")
+      .eq("user_id", studentId);   // ✅ get ALL tokens
+
+    if (error) {
+      console.error("Error fetching tokens:", error);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      console.log("No push tokens found for student:", studentId);
+      return;
+    }
+
+    // ✅ Extract tokens and filter invalid ones
+    const tokens = data
+      .map(item => item.expo_push_token)
+      .filter(token => token && token.startsWith("ExponentPushToken"));
+
+    if (tokens.length === 0) {
+      console.log("No valid Expo tokens found.");
+      return;
+    }
+
+    console.log("Sending notification to", tokens.length, "devices");
+
+    const messages = tokens.map(token => ({
+      to: token,
+      title: "Scan Successful",
+      body: "Your QR code was scanned.",
+      data: { refresh: true },
+      priority: "high",
+    }));
+
     try {
-      const { data, error } = await supabase
-        .from("user_push_tokens")
-        .select("expo_push_token")
-        .eq("user_id", studentId);
-
-      if (error) {
-        console.error("Error fetching tokens:", error);
-        return false;
-      }
-
-      if (!data || data.length === 0) {
-        console.log("No push tokens found for student:", studentId);
-        return false;
-      }
-
-      // Extract tokens and filter invalid ones
-      const tokens = data
-        .map(item => item.expo_push_token)
-        .filter(token => token && token.startsWith("ExponentPushToken"));
-
-      if (tokens.length === 0) {
-        console.log("No valid Expo tokens found.");
-        return false;
-      }
-
-      console.log("Sending notification to", tokens.length, "devices");
-
-      const messages = tokens.map(token => ({
-        to: token,
-        title: "Scan Successful",
-        body: "Your QR code was scanned.",
-        data: { refresh: true },
-        priority: "high",
-      }));
-
       const response = await fetch("https://exp.host/--/api/v2/push/send", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(messages),  
+        body: JSON.stringify(messages),
       });
 
       const result = await response.json();
       console.log("Push response:", result);
-      return true;
+
     } catch (error) {
       console.error("Failed to send push notification:", error);
-      return false;
     }
   }
 
@@ -235,7 +226,7 @@ const GuardScanner = () => {
 
       // Clean phone number (remove spaces, dashes, etc.)
       const cleanedPhone = parentPhone.replace(/\D/g, '');
-      
+
       // Validate Indian phone number format
       if (!cleanedPhone.startsWith('91') || cleanedPhone.length !== 12) {
         console.log('Invalid phone number format:', parentPhone);
@@ -243,15 +234,15 @@ const GuardScanner = () => {
       }
 
       const now = new Date();
-      const date = now.toLocaleDateString('en-IN', { 
-        day: '2-digit', 
-        month: '2-digit', 
-        year: 'numeric' 
+      const date = now.toLocaleDateString('en-IN', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
       });
-      const time = now.toLocaleTimeString('en-IN', { 
-        hour: '2-digit', 
+      const time = now.toLocaleTimeString('en-IN', {
+        hour: '2-digit',
         minute: '2-digit',
-        hour12: true 
+        hour12: true
       });
 
       const notificationData = {
@@ -295,7 +286,7 @@ const GuardScanner = () => {
     try {
       setCustomIndicator(true);
       setGuardDetailsLoaded(false);
-      
+
       const { data: guardProfile, error } = await supabase
         .from('profiles')
         .select('college_id, current_session_id')
@@ -303,9 +294,9 @@ const GuardScanner = () => {
         .single();
 
       if (error) throw error;
-      
+
       setGuardCollegeId(guardProfile.college_id);
-      
+
       setIsSessionJoined(!!guardProfile.current_session_id && !!guardProfile.college_id);
     } catch (error) {
       console.error("Error fetching guard's details:", error);
@@ -323,7 +314,7 @@ const GuardScanner = () => {
   const changeLanguage = async (newLanguage) => {
     try {
       setLanguage(newLanguage);
-      
+
       // Save to database
       const { error } = await supabase
         .from('profiles')
@@ -339,7 +330,7 @@ const GuardScanner = () => {
 
   const joinSession = useCallback(async () => {
     const trimmedSessionId = sessionId.trim();
-    
+
     if (!trimmedSessionId) {
       showAlert('Error', 'Please enter a session ID.');
       return;
@@ -355,16 +346,16 @@ const GuardScanner = () => {
         .maybeSingle();
 
       if (sessionError) throw sessionError;
-      
+
       if (!sessionData) {
         throw new Error('Invalid session ID or session not found');
       }
 
       const { error: updateError } = await supabase
         .from('profiles')
-        .update({ 
+        .update({
           current_session_id: sessionData.id,
-          college_id: sessionData.college_id 
+          college_id: sessionData.college_id
         })
         .eq('id', user.id);
 
@@ -372,7 +363,7 @@ const GuardScanner = () => {
 
       setIsSessionJoined(true);
       await fetchGuardDetails();
-      showAlert('Success', 'Session joined successfully!',[{text:'Ok'}]);
+      showAlert('Success', 'Session joined successfully!', [{ text: 'Ok' }]);
       setSessionId('');
     } catch (error) {
       console.error("Error joining session:", error);
@@ -402,7 +393,7 @@ const GuardScanner = () => {
       } catch (parseError) {
         throw new Error('Invalid QR code format: Cannot parse JSON');
       }
-      
+
       const { student_id, type } = qrData;
 
       if (!student_id || !type || !['exit', 'return'].includes(type)) {
@@ -518,26 +509,9 @@ const GuardScanner = () => {
         }
       }
 
-      // Send push notification to student
-      const pushNotificationSent = await notifyStudentOfScan(student_id);
-      
-      setStudentDetails({ 
-        ...student, 
-        type,
-        destination
-      });
-      
-      // Show success message with SMS status if applicable
-      let successMessage = `Student ${type} recorded successfully!`;
-      if (smsResult) {
-        if (smsResult.success) {
-          successMessage += `\n${t.smsNotificationSent}`;
-        } else {
-          successMessage += `\n${t.smsNotificationFailed}`;
-        }
-      }
-      
-      showAlert('Success', successMessage);
+      await notifyStudentOfScan(student_id);
+      setStudentDetails({ ...student, type });
+      showAlert('Success', `Student ${type} recorded successfully!`);
     } catch (error) {
       console.error('Error scanning QR code:', error);
       showAlert('Error', error.message || 'Please scan a valid QR code');
@@ -546,13 +520,13 @@ const GuardScanner = () => {
     } finally {
       setScanLoading(false);
     }
-  }, [guardDetailsLoaded, guardCollegeId, language]);
+  }, [guardDetailsLoaded, guardCollegeId]);
 
   const leaveSession = useCallback(async () => {
     try {
       setLeaveLoading(true);
-      
-      const { error } = await supabase 
+
+      const { error } = await supabase
         .from('profiles')
         .update({ current_session_id: null, college_id: null })
         .eq('id', user.id);
@@ -571,14 +545,14 @@ const GuardScanner = () => {
     }
   }, [user?.id, fetchGuardDetails]);
 
-  const onLogout = async() => {
-    try{
+  const onLogout = async () => {
+    try {
       setLoggingOut(true);
       await signOut();
       setLoggingOut(false);
-    }catch(error){
-      showAlert('Error','Error occoured while logging out');
-    }finally{
+    } catch (error) {
+      showAlert('Error', 'Error occoured while logging out');
+    } finally {
       setLoggingOut(false);
     }
   };
@@ -611,9 +585,9 @@ const GuardScanner = () => {
               <MemoizedMaterialIcons name="close" size={28} color="#334155" />
             </Pressable>
           </View>
-          
+
           {/* Scrollable Content */}
-          <ScrollView 
+          <ScrollView
             style={styles.modalScrollView}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={styles.modalScrollContent}
@@ -669,10 +643,10 @@ const GuardScanner = () => {
             {isSessionJoined && (
               <Pressable
                 style={[styles.secondaryButton, leaveLoading && styles.disabledButton]}
-                onPress={()=>[
-                  showAlert('Session','Do You really want to leave the session',[
-                    {text:'Yes',style:'destructive',onPress:leaveSession},
-                    {text:'Cancel',style:'cancel'}
+                onPress={() => [
+                  showAlert('Session', 'Do You really want to leave the session', [
+                    { text: 'Yes', style: 'destructive', onPress: leaveSession },
+                    { text: 'Cancel', style: 'cancel' }
                   ])
                 ]}
                 disabled={leaveLoading}
@@ -687,12 +661,13 @@ const GuardScanner = () => {
 
             <Pressable
               style={[styles.dangerButton, logoutLoading && styles.disabledButton]}
-              onPress={()=>{
+              onPress={() => {
                 showAlert('Logout',
                   'Do you really want to Logout?',
-                  [{text:'Yes',onPress:onLogout},
-                    {text:'Cancel',style:'cancel'}
+                  [{ text: 'Yes', onPress: onLogout },
+                  { text: 'Cancel', style: 'cancel' }
                   ]
+
                 )
               }}
               disabled={logoutLoading}
@@ -718,7 +693,7 @@ const GuardScanner = () => {
         <Text style={styles.permissionText}>
           {t.permissionText}
         </Text>
-        <Pressable 
+        <Pressable
           style={styles.primaryButton}
           onPress={requestPermission}
         >
@@ -735,10 +710,10 @@ const GuardScanner = () => {
       <View style={styles.studentCardContainer}>
         <View style={styles.studentCard}>
           <Text style={styles.cardTitle}>{t.studentCard}</Text>
-          
+
           {studentImage ? (
-            <Image 
-              source={{ uri: studentImage }} 
+            <Image
+              source={{ uri: studentImage }}
               style={styles.studentImage}
               resizeMode="cover"
             />
@@ -747,7 +722,7 @@ const GuardScanner = () => {
               <Text style={styles.placeholderText}>{t.noImage}</Text>
             </View>
           )}
-          
+
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t.name}:</Text>
             <Text style={styles.detailValue}>{studentDetails.name}</Text>
@@ -760,42 +735,28 @@ const GuardScanner = () => {
             <Text style={styles.detailLabel}>{t.department}:</Text>
             <Text style={styles.detailValue}>{studentDetails.department || 'Computer Technology'}</Text>
           </View>
-          
-          {/* Add Destination Row */}
-          {studentDetails.destination && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>{t.destination}:</Text>
-              <Text style={styles.destinationValue}>
-                {studentDetails.destination}
-              </Text>
-            </View>
-          )}
-          
           <View style={styles.detailRow}>
             <Text style={styles.detailLabel}>{t.action}:</Text>
             <Text style={[
-              styles.detailValue, 
+              styles.detailValue,
               styles.statusBadge,
               studentDetails.type === 'exit' ? styles.exitBadge : styles.returnBadge
             ]}>
               {studentDetails.type === 'exit' ? t.goingHome : t.returning}
             </Text>
           </View>
-
-          {/* SMS Notification Status */}
           {smsNotificationStatus && (
-            <View style={styles.detailRow}>
-              <Text style={styles.detailLabel}>SMS:</Text>
+            <View style={styles.smsStatusContainer}>
               <Text style={[
-                styles.detailValue,
+                styles.smsStatusText,
                 smsNotificationStatus.success ? styles.smsSuccess : styles.smsError
               ]}>
-                {smsNotificationStatus.success ? t.parentNotified : t.parentNotificationFailed}
+                SMS to parent: {smsNotificationStatus.success ? 'Sent ' : 'Failed '}
               </Text>
             </View>
           )}
         </View>
-        
+
         <Pressable
           style={styles.primaryButton}
           onPress={handleScanAgain}
@@ -807,16 +768,16 @@ const GuardScanner = () => {
   }, [studentDetails, studentImage, smsNotificationStatus, handleScanAgain, language]);
 
   if (!permission) {
-    return <View />; 
+    return <View />;
   }
-  
+
   if (!permission.granted) {
     return PermissionView;
   }
 
   if (logoutLoading) {
     return (
-      <CustomLoadingScreen 
+      <CustomLoadingScreen
         type="logout"
         message={t.loggingOut}
         duration={LOGOUT_DELAY}
@@ -853,16 +814,16 @@ const GuardScanner = () => {
               style={styles.settingsButton}
               onPress={() => setSettingsVisible(true)}
             >
-              <MemoizedMaterialIcons 
-                name="settings" 
-                size={24} 
-                color={'#fff'} 
+              <MemoizedMaterialIcons
+                name="settings"
+                size={24}
+                color={'#fff'}
               />
             </Pressable>
           </View>
         </LinearGradient>
 
-        <ScrollView 
+        <ScrollView
           contentContainerStyle={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
@@ -932,13 +893,13 @@ const GuardScanner = () => {
         </ScrollView>
 
         <SettingsModal />
-        <CustomAlert 
+        <CustomAlert
           visible={customAlert.visible}
           title={customAlert.title}
           message={customAlert.message}
           buttons={customAlert.buttons}
-          onDismiss={()=>{
-            setCustomAlert({visible:false,title:'',message:'',buttons:[]});
+          onDismiss={() => {
+            setCustomAlert({ visible: false, title: '', message: '', buttons: [] });
           }}
         />
       </SafeAreaView>
@@ -1168,21 +1129,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     flex: 1,
   },
-  destinationValue: {
-    fontSize: 16,
-    color: '#3b82f6',
-    fontWeight: '500',
-    flex: 1,
-    fontStyle: 'italic',
-  },
-  smsSuccess: {
-    color: '#10b981',
-    fontWeight: '600',
-  },
-  smsError: {
-    color: '#ef4444',
-    fontWeight: '600',
-  },
   statusBadge: {
     paddingVertical: 4,
     paddingHorizontal: 10,
@@ -1199,6 +1145,23 @@ const styles = StyleSheet.create({
   returnBadge: {
     backgroundColor: '#dcfce7',
     color: '#10b981',
+  },
+  smsStatusContainer: {
+    marginTop: 15,
+    padding: 10,
+    borderRadius: 8,
+    backgroundColor: '#f8fafc',
+    alignItems: 'center',
+  },
+  smsStatusText: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  smsSuccess: {
+    color: '#10b981',
+  },
+  smsError: {
+    color: '#ef4444',
   },
   loadingContainer: {
     flex: 1,
@@ -1224,27 +1187,12 @@ const styles = StyleSheet.create({
     padding: 25,
     maxHeight: '85%',
   },
-  modalHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
-  },
   modalTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: '#334155',
-    flex: 1,
+    marginBottom: 20,
     textAlign: 'center',
-  },
-  modalCloseButton: {
-    marginBottom: 10,
-  },
-  modalScrollView: {
-    flex: 1,
-  },
-  modalScrollContent: {
-    paddingBottom: 20,
   },
   settingSection: {
     marginBottom: 25,
@@ -1291,4 +1239,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     lineHeight: 22,
   },
+  closeButton: {
+    backgroundColor: '#f1f5f9',
+    borderRadius: 10,
+    padding: 15,
+    alignItems: 'center',
+    marginTop: 10,
+  },
+  closeButtonText: {
+    color: '#334155',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  modalCloseButton: {
+    marginBottom: 10
+  }
 });

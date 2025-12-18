@@ -5,7 +5,6 @@ import { Platform } from 'react-native';
 import { clearUserData, getUserData, getUserRole, isCachedDataValid, saveUserData, saveUserRole } from '../helpers/storage.js';
 import { supabase } from '../lib/supabase.js';
 import { useAlert } from './AlertContext.js';
-
 const AuthContext = createContext();
 
 // Constants for better maintainability
@@ -292,7 +291,7 @@ export const AuthProvider = ({ children }) => {
     setIsLoadingAuth(true);
     
     try {
-      // Check active sessions for both OTP and password flows
+      
       let existingDeviceId = null;
       const { data: existingSessions, error: sessionError } = await supabase
         .from('active_sessions')

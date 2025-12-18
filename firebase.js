@@ -7,7 +7,7 @@ const firebaseConfig = {
     projectId: "staypass-da9f3",
     storageBucket: "staypass-da9f3.appspot.com",
     messagingSenderId: "291106013613",
-    appId: "1:291106013613:android:f7278278c4928f35f52124"
+    appId: "1:291106013613:android:231c92521312e511f52124"
   };
   
 

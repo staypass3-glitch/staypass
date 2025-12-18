@@ -119,7 +119,7 @@ const StudentPortal = ({ navigation }) => {
       if (user?.id) {
         await supabase
           .from('user_push_tokens')
-          .upsert({
+          .insert({
             user_id: user.id,
             expo_push_token: token,
             last_used_at: new Date().toISOString(),

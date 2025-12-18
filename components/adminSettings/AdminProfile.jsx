@@ -1,4 +1,3 @@
-import { CustomAlert } from '@/components';
 import CustomInput from '@/components/CustomInput';
 import saveImage from '@/components/saveImage';
 import ScreenWrapper from '@/components/ScreenWrapper';
@@ -21,6 +20,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import ImagePickerAlert from '../ImagePickerAlert';
 // Error messages constants
 const ERROR_MESSAGES = {
   PERMISSION_CAMERA: 'Permission not granted. Please give camera permissions to take pictures.',
@@ -589,7 +589,7 @@ const AdminProfile = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
-      <CustomAlert
+      <ImagePickerAlert
         visible={customAlert.visible}
         title={customAlert.title}
         message={customAlert.message}

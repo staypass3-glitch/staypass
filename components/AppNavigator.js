@@ -109,6 +109,7 @@ export default function AppNavigator() {
               <Stack.Screen name="AdminProfile" component={AdminProfile}/>
               <Stack.Screen name="AboutUs" component={AboutUs} />
               <Stack.Screen name="ChangePassword" component={ChangePassword} />
+              <Stack.Screen name="ForgotChangePass" component={ForgotChangePass} />
               <Stack.Screen name="AllAdmins" component={AllAdmins} />
             </>
           )}

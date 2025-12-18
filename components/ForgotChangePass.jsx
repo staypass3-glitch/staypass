@@ -1,9 +1,11 @@
+import theme from '@/constants/theme';
 import { useAlert } from '@/context/AlertContext';
 import { useAuth } from '@/context/AuthContext';
+import { supabase } from '@/lib/supabase';
 import { MaterialIcons } from '@expo/vector-icons';
 import { useNavigation } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   ScrollView,
@@ -14,23 +16,24 @@ import {
   View
 } from 'react-native';
 
-const ForgotChangePass = () => {<ScrollView></ScrollView>
+const ForgotChangePass = () => {
   const navigation = useNavigation();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [otp, setOtp] = useState(['', '', '', '', '', '']);
+  const [otp, setOtp] = useState('');
   const [resendTimer, setResendTimer] = useState(0);
-  const [canResend, setCanResend] = useState(false);
+  const [canResend, setCanResend] = useState(true);
+  const [otpSent, setOtpSent] = useState(false);
   const [otpVerified, setOtpVerified] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const {showAlert} = useAlert();
-  const inputRefs = useRef([]);
+  const { showAlert } = useAlert();
 
   // Extract phone number from user object (remove +91 if present)
   const userPhone = user?.phone_number?.replace('+91', '') || null;
+
 
   useEffect(() => {
     // Timer for resend OTP
@@ -39,73 +42,76 @@ const ForgotChangePass = () => {<ScrollView></ScrollView>
       interval = setInterval(() => {
         setResendTimer(prev => prev - 1);
       }, 1000);
-    } else {
+    } else if (resendTimer === 0 && otpSent) {
       setCanResend(true);
     }
     
     return () => clearInterval(interval);
-  }, [resendTimer]);
+  }, [resendTimer, otpSent]);
 
   const handleSendOTP = async () => {
+    if (!userPhone) {
+      showAlert('Error', 'Phone number not found. Please update your profile.');
+      return;
+    }
+
     try {
       setLoading(true);
+      setOtp(''); // Clear previous OTP
 
-      // Simulate OTP sending to user's phone
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      
+      // Supabase OTP for phone - sends SMS
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: `+91${userPhone}`,
+        options: {
+          channel: 'sms',
+        }
+      });
+
+      if (error) throw error;
+
       showAlert('OTP Sent', `OTP has been sent to +91 ${userPhone}`);
+      setOtpSent(true);
       setResendTimer(30);
       setCanResend(false);
       
     } catch (error) {
-      showAlert('Error', 'Failed to send OTP. Please try again.');
+      showAlert('Error', error.message || 'Failed to send OTP. Please try again.');
     } finally {
       setLoading(false);
     }
   };
-
-  const handleOtpChange = (value, index) => {
-    if (value.length > 1) return; 
-    
-    const newOtp = [...otp];
-    newOtp[index] = value;
-    setOtp(newOtp);
-    
-    // Auto-focus next input
-    if (value && index < 5) {
-      inputRefs.current[index + 1]?.focus();
-    }
-    
-    // Auto-verify when all digits are entered
-    if (newOtp.every(digit => digit !== '') && newOtp.join('').length === 6) {
-      verifyOTP(newOtp.join(''));
-    }
+  
+  const handleBackPress = () => {
+    navigation.goBack();
   };
-
-  const handleKeyPress = (e, index) => {
-    // Handle backspace
-    if (e.nativeEvent.key === 'Backspace' && !otp[index] && index > 0) {
-      inputRefs.current[index - 1]?.focus();
+  
+  const verifyOTP = async () => {
+    if (otp.length !== 6) {
+      showAlert('Error', 'Please enter a 6-digit OTP');
+      return;
     }
-  };
 
-  const verifyOTP = async (otpCode) => {
     setLoading(true);
     try {
-      // For demo purposes, accept any 6-digit code
-      if (otpCode.length === 6 && /^\d{6}$/.test(otpCode)) {
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
+      // Supabase verify OTP
+      const { data, error } = await supabase.auth.verifyOtp({
+        phone: `+91${userPhone}`,
+        token: otp,
+        type: 'sms'
+      });
+
+      if (error) throw error;
+
+      if (data?.user) {
         setOtpVerified(true);
         showAlert('Success', 'OTP verified successfully! You can now change your password.');
       } else {
-        throw new Error('Invalid OTP');
+        throw new Error('Verification failed');
       }
       
     } catch (error) {
-      showAlert('Error', 'Invalid OTP. Please try again.');
-      setOtp(['', '', '', '', '', '']);
-      inputRefs.current[0]?.focus();
+      showAlert('Error', error.message || 'Invalid OTP. Please try again.');
+      setOtp('');
     } finally {
       setLoading(false);
     }
@@ -113,12 +119,7 @@ const ForgotChangePass = () => {<ScrollView></ScrollView>
 
   const handleResendOTP = async () => {
     if (!canResend) return;
-    
-    try {
-      await handleSendOTP();
-    } catch (error) {
-      showAlert('Error', 'Failed to resend OTP. Please try again.');
-    }
+    await handleSendOTP();
   };
 
   const handleChangePassword = async () => {
@@ -140,9 +141,13 @@ const ForgotChangePass = () => {<ScrollView></ScrollView>
     try {
       setLoading(true);
 
-  
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
+      // Supabase update password
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (error) throw error;
+
       showAlert('Success', 'Password changed successfully!', [
         {
           text: 'OK',
@@ -151,179 +156,196 @@ const ForgotChangePass = () => {<ScrollView></ScrollView>
       ]);
       
     } catch (error) {
-      showAlert('Error', 'Failed to change password. Please try again.');
+      showAlert('Error', error.message || 'Failed to change password. Please try again.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
+    <View style={{flex:1, backgroundColor:'#fff'}}>
+      <ScrollView style={{flex: 1}}>
+        <LinearGradient 
+          colors={['#2563eb', '#3b82f6', '#60a5fa']} 
+          style={styles.gradient}
+        >
+          <View style={styles.headerContainer}>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={handleBackPress}
+              activeOpacity={0.7}
+            >
+              <MaterialIcons name="arrow-back" size={24} color={theme.colors.white} />
+            </TouchableOpacity>
+            
+            <View style={styles.logoContainer}>
+              <Text style={styles.logoText}>🔒</Text>
+            </View>
+          </View>
+        </LinearGradient>
 
-    <View style={{flex:1,backgroundColor:'#fff'}}>
-    <ScrollView style={{flex: 1}}>
- 
-      <LinearGradient 
-        colors={['#2563eb', '#3b82f6', '#60a5fa']} 
-        style={styles.gradient}
-      >
-        <View style={styles.logoContainer}>
-          <Text style={styles.logoText}>🔒</Text>
-        </View>
-      </LinearGradient>
+        <View style={styles.container}>
+          <Text style={styles.title}>Change Password</Text>
+          <Text style={styles.subtitle}>Verify your identity to change password</Text>
 
-      <View style={styles.container}>
-        <Text style={styles.title}>Change Password</Text>
-        <Text style={styles.subtitle}>Verify your identity to change password</Text>
-
-        {/* User Info */}
-        <View style={styles.userInfo}>
-          <Text style={styles.userInfoText}>Verification will be sent to:</Text>
-          <Text style={styles.phoneText}>+91 {userPhone}</Text>
-        </View>
-
-        {/* OTP Section */}
-        <View style={styles.section}>
-          <Text style={styles.label}>Enter OTP</Text>
-          <View style={styles.otpContainer}>
-            {otp.map((digit, index) => (
-              <TextInput
-                key={index}
-                ref={ref => inputRefs.current[index] = ref}
-                style={[
-                  styles.otpInput,
-                  digit && styles.otpInputFilled,
-                  otpVerified && styles.otpInputVerified
-                ]}
-                value={digit}
-                onChangeText={(value) => handleOtpChange(value, index)}
-                onKeyPress={(e) => handleKeyPress(e, index)}
-                keyboardType="numeric"
-                maxLength={1}
-                editable={!loading && !otpVerified}
-              />
-            ))}
+          {/* User Info */}
+          <View style={styles.userInfo}>
+            <Text style={styles.userInfoText}>Verification will be sent to:</Text>
+            <Text style={styles.phoneText}>+91 {userPhone}</Text>
           </View>
 
-          {!otpVerified ? (
-            <View style={styles.otpActions}>
-              <TouchableOpacity
-                style={[styles.button, styles.sendOtpButton]}
-                onPress={handleSendOTP}
-                disabled={loading || resendTimer>0}
-              >
-                {loading ? (
-                  <ActivityIndicator color="#fff" size="small" />
-                ) : (
-                  <Text style={styles.buttonText}>Send OTP</Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                onPress={() =>{handleResendOTP();
-                    setResendTimer(30);
-                }}
-                disabled={!canResend}
-                style={styles.resendButton}
-              >
-                <Text style={[
-                  styles.resendText,
-                  canResend ? styles.resendActive : styles.resendInactive
-                ]}>
-                  {canResend ? 'Resend OTP' : `Resend in ${resendTimer}s`}
-                </Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <View style={styles.verifiedBadge}>
-              <Text style={styles.verifiedText}> OTP Verified</Text>
-            </View>
-          )}
-        </View>
-
-        {/* Password Fields - Only show after OTP verification */}
-        {otpVerified && (
-          <View style={styles.section}>
-            <Text style={styles.label}>New Password</Text>
-            <View style={styles.inputContainer}>
-              <TextInput
-                placeholder="Enter new password"
-                value={newPassword}
-                onChangeText={setNewPassword}
-                secureTextEntry={!showPassword}
-                style={styles.passwordInput}
-                placeholderTextColor="#999"
-              />
-              <TouchableOpacity 
-                onPress={() => setShowPassword(!showPassword)}
-                style={styles.eyeIcon}
-              >
-                <Text style={styles.eyeIconText}>
-                <MaterialIcons 
-                  name={!showPassword ? "visibility" : "visibility-off"} 
-                  size={20} 
-                  color="#999" 
-                />
-                </Text>
-              </TouchableOpacity>
-            </View>
-
-            <Text style={styles.label}>Confirm Password</Text>
-            <View style={styles.inputContainer}>
-              <TextInput
-                placeholder="Confirm new password"
-                value={confirmPassword}
-                onChangeText={setConfirmPassword}
-                secureTextEntry={!showConfirmPassword}
-                style={styles.passwordInput}
-                placeholderTextColor="#999"
-              />
-              <TouchableOpacity 
-                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
-                style={styles.eyeIcon}
-              >
-                <Text style={styles.eyeIconText}>
-                <MaterialIcons 
-                  name={!confirmPassword ? "visibility" : "visibility-off"} 
-                  size={20} 
-                  color="#999" 
-                />
-                </Text>
-              </TouchableOpacity>
-            </View>
-
+          {/* Send OTP Button - Show only if OTP not sent yet */}
+          {!otpSent && (
             <TouchableOpacity
-              style={[styles.button, styles.changePasswordButton]}
-              onPress={handleChangePassword}
+              style={[styles.button, styles.sendOtpButton]}
+              onPress={handleSendOTP}
               disabled={loading}
             >
               {loading ? (
                 <ActivityIndicator color="#fff" size="small" />
               ) : (
-                <Text style={styles.buttonText}>Change Password</Text>
+                <Text style={styles.buttonText}>Send OTP</Text>
               )}
             </TouchableOpacity>
-          </View>
-        )}
+          )}
 
-        <TouchableOpacity 
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <Text style={styles.backButtonText}>Back to Profile</Text>
-        </TouchableOpacity>
-      </View>
-    
+          {/* OTP Section - Show only after OTP is sent */}
+          {otpSent && (
+            <View style={styles.section}>
+              <Text style={styles.label}>Enter 6-digit OTP</Text>
+              <View style={styles.otpContainer}>
+                <TextInput
+                  placeholder="Enter 6-digit OTP"
+                  value={otp}
+                  onChangeText={setOtp}
+                  keyboardType="numeric"
+                  autoCapitalize="none"
+                  style={styles.otpInput}
+                  placeholderTextColor="#999"
+                  maxLength={6}
+                  editable={!loading && !otpVerified}
+                />
+              </View>
 
-    </ScrollView>
-</View>
+              {!otpVerified ? (
+                <View style={styles.otpActions}>
+                  <TouchableOpacity
+                    style={[styles.button, styles.verifyButton, (loading || otp.length !== 6) && styles.buttonDisabled]}
+                    onPress={verifyOTP}
+                    disabled={loading || otp.length !== 6}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#fff" size="small" />
+                    ) : (
+                      <Text style={styles.buttonText}>Verify OTP</Text>
+                    )}
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={handleResendOTP}
+                    disabled={!canResend}
+                    style={styles.resendButton}
+                  >
+                    <Text style={[
+                      styles.resendText,
+                      canResend ? styles.resendActive : styles.resendInactive
+                    ]}>
+                      {canResend ? 'Resend OTP' : `Resend in ${resendTimer}s`}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <View style={styles.verifiedBadge}>
+                  <MaterialIcons name="check-circle" size={24} color="#10b981" />
+                  <Text style={styles.verifiedText}>OTP Verified</Text>
+                </View>
+              )}
+            </View>
+          )}
+
+          {/* Password Fields - Only show after OTP verification */}
+          {otpVerified && (
+            <View style={styles.section}>
+              <Text style={styles.label}>New Password</Text>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  placeholder="Enter new password"
+                  value={newPassword}
+                  onChangeText={setNewPassword}
+                  secureTextEntry={!showPassword}
+                  style={styles.passwordInput}
+                  placeholderTextColor="#999"
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowPassword(!showPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <MaterialIcons 
+                    name={showPassword ? "visibility" : "visibility-off"} 
+                    size={20} 
+                    color="#999" 
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.label}>Confirm Password</Text>
+              <View style={styles.inputContainer}>
+                <TextInput
+                  placeholder="Confirm new password"
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  secureTextEntry={!showConfirmPassword}
+                  style={styles.passwordInput}
+                  placeholderTextColor="#999"
+                />
+                <TouchableOpacity 
+                  onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                  style={styles.eyeIcon}
+                >
+                  <MaterialIcons 
+                    name={showConfirmPassword ? "visibility" : "visibility-off"} 
+                    size={20} 
+                    color="#999" 
+                  />
+                </TouchableOpacity>
+              </View>
+
+              <TouchableOpacity
+                style={[styles.button, styles.changePasswordButton]}
+                onPress={handleChangePassword}
+                disabled={loading}
+              >
+                {loading ? (
+                  <ActivityIndicator color="#fff" size="small" />
+                ) : (
+                  <Text style={styles.buttonText}>Change Password</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
   gradient: {
     height: 150,
+    paddingTop: 40,
+    paddingHorizontal: 20,
+  },
+  headerContainer: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  backButton: {
+    position: 'absolute',
+    left: 0,
+    padding: 8,
+    zIndex: 1,
   },
   logoContainer: {
     alignItems: 'center',
@@ -337,6 +359,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     paddingHorizontal: 25,
     paddingTop: 30,
+    paddingBottom: 30,
   },
   title: {
     fontWeight: 'bold',
@@ -379,35 +402,52 @@ const styles = StyleSheet.create({
   },
   otpContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 15,
+    alignItems: 'center',
+    marginBottom: 20,
+    borderColor: '#e0e0e0',
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 15,
+    height: 56,
+    backgroundColor: '#f8f9fa',
+    width: '100%',
   },
   otpInput: {
-    width: 45,
-    height: 45,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    textAlign: 'center',
+    width: '100%',
+    height: 50,
     fontSize: 18,
-    backgroundColor: '#f9f9f9',
-  },
-  otpInputFilled: {
-    borderColor: '#2563eb',
-    backgroundColor: '#eff6ff',
-  },
-  otpInputVerified: {
-    borderColor: '#10b981',
-    backgroundColor: '#ecfdf5',
+    letterSpacing: 8,
+    textAlign: 'center',
+    textAlignVertical: 'center',
+    includeFontPadding: false,
+    color: '#333',
   },
   otpActions: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  sendOtpButton: {
+  verifyButton: {
     flex: 1,
     marginRight: 10,
+  },
+  button: {
+    backgroundColor: '#4158D0',
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendOtpButton: {
+    marginBottom: 20,
+  },
+  buttonDisabled: {
+    backgroundColor: '#a0a0a0',
+  },
+  buttonText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 16,
   },
   resendButton: {
     padding: 10,
@@ -429,6 +469,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     borderWidth: 1,
     borderColor: '#10b981',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
   },
   verifiedText: {
     color: '#10b981',
@@ -451,37 +494,14 @@ const styles = StyleSheet.create({
     height: 50,
     color: '#333',
     fontSize: 16,
+    textAlignVertical: 'center',
+    includeFontPadding: false,
   },
   eyeIcon: {
     padding: 10,
   },
-  eyeIconText: {
-    fontSize: 20,
-  },
-  button: {
-    backgroundColor: '#4158D0',
-    paddingVertical: 12,
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
   changePasswordButton: {
     marginTop: 10,
-  },
-  buttonText: {
-    color: '#fff',
-    fontWeight: '600',
-    fontSize: 16,
-  },
-  backButton: {
-    alignItems: 'center',
-    padding: 15,
-    marginTop: 13,
-  },
-  backButtonText: {
-    fontSize: 16,
-    color: '#4158D0',
-    fontWeight: '500',
   },
 });
 
